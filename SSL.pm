@@ -15,8 +15,14 @@ use vars qw(@ISA);
 sub READ {
   my ($socket, $buf, $len, $offset) = \ (@_);
   my $ssl = $$socket->_get_ssl();
-  defined($$offset) or
-    return length($$buf = Net::SSLeay::read($ssl, $$len));
+
+  # No offset.  Replace the buffer.
+  unless (defined $$offset) {
+    $$buf = Net::SSLeay::read($ssl, $$len);
+    return length($$buf) if defined $$buf;
+    $$buf = "";
+    return;
+  }
 
   defined(my $read = Net::SSLeay::read($ssl, $$len))
     or return undef;
@@ -25,6 +31,21 @@ sub READ {
   $$offset > $buf_len and $$buf .= chr(0) x ($$offset - $buf_len);
   substr($$buf, $$offset) = $read;
   return length($read);
+}
+
+sub WRITE {
+  my $socket = shift;
+  my ($buf, $len, $offset) = @_;
+  $offset = 0 unless defined $offset;
+
+  # Return number of characters written.
+  my $ssl  = $socket->_get_ssl();
+  my $wrote_len = Net::SSLeay::write($ssl, substr($buf, $offset, $len));
+
+  # Net::SSLeay::write() returns the number of bytes written, or -1 on
+  # error.  Normal syswrite() expects 0 here.
+  return 0 if $wrote_len < 0;
+  return $wrote_len;
 }
 
 1;
