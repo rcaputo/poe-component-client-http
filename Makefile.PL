@@ -46,8 +46,8 @@ WriteMakefile
     dist         =>
     { COMPRESS   => 'gzip -9f',
       SUFFIX     => 'gz',
-      PREOP      => ( 'cvs2cl.pl -l "-d\'a year ago<\'" ' .
-                    '--utc --stdout > $(DISTNAME)-$(VERSION)/CHANGES'
+      PREOP      => ( 'cvs-log.perl | ' .
+                      'tee ./$(DISTNAME)-$(VERSION)/CHANGES > ./CHANGES'
                     ),
     },
   );
