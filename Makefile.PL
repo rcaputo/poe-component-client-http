@@ -9,16 +9,18 @@ use ExtUtils::AutoInstall;
 # Touch CHANGES so it exists.
 open(CHANGES, ">>CHANGES") and close CHANGES;
 
+my %prereq = (
+  'POE'            => 0.27,
+  'HTTP::Request'  => 1.30,
+  'HTTP::Response' => 1.37,
+  'URI'            => 1.24,
+  'HTML::Parser'   => 3.33,  # For HTML::HeadParser
+);
+
 # Prompt for optional things.
 ExtUtils::AutoInstall->import
   ( -version => '0.54',
-    -core    =>
-    [ 'POE'            => 0.27,
-      'HTTP::Request'  => 1.30,
-      'HTTP::Response' => 1.37,
-      'URI'            => 1.24,
-      'HTML::Parser'   => 3.33,  # For HTML::HeadParser
-    ],
+    -core    => [ %prereq ],
     "Optional modules for SSL support." =>
     [ -default              => 0,
       'Net::SSLeay'         => 1.17,
@@ -35,11 +37,7 @@ WriteMakefile
     PM           => { 'HTTP.pm'        => '$(INST_LIBDIR)/HTTP.pm',
                       'SSL.pm'         => '$(INST_LIBDIR)/HTTP/SSL.pm',
                     },
-    PREREQ_PM    => { 'POE'                 => 0.1106,
-                      'HTTP::Request'       => 1.27,
-                      'HTTP::Response'      => 1.33,
-                      'URI'                 => 1.11,
-                    },
+    PREREQ_PM    => \%prereq,
     dist         =>
     { COMPRESS   => 'gzip -9f',
       SUFFIX     => 'gz',
