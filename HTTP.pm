@@ -5,7 +5,7 @@ package POE::Component::Client::HTTP;
 
 use strict;
 
-sub DEBUG      () { 0 }
+sub DEBUG      () { 1 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
@@ -297,9 +297,11 @@ sub poco_weeble_request {
   }
 
   # Add an agent header if one isn't included.
-  if (@{$heap->{agent}}) {
-    my $this_agent = $heap->{agent}->[rand @{$heap->{agent}}];
-    $http_request->user_agent($this_agent);
+  unless (defined $http_request->user_agent()) {
+    if (@{$heap->{agent}}) {
+      my $this_agent = $heap->{agent}->[rand @{$heap->{agent}}];
+      $http_request->user_agent($this_agent);
+    }
   }
 
   # Add a from header if one isn't included.
@@ -507,6 +509,8 @@ sub poco_weeble_connect_ok {
       ErrorEvent   => 'got_socket_error',
     );
 
+  DEBUG and warn "wheel $wheel_id became wheel ", $new_wheel->ID, "\n";
+
   # Add the new wheel ID to the lookup table.
 
   $heap->{wheel_to_request}->{ $new_wheel->ID() } = $request_id;
@@ -620,13 +624,6 @@ sub poco_weeble_io_flushed {
 
   my $request = $heap->{request}->{$request_id};
   $request->[REQ_STATE] = RS_IN_STATUS;
-
-  # Shutdown the sending side of the socket, but only if we're not
-  # using https.  SSL apparently requires bidirectional chat
-  # throughout.
-  if ($request->[REQ_REQUEST]->uri->scheme() ne 'https') {
-    $request->[REQ_WHEEL]->shutdown_output();
-  }
 }
 
 #------------------------------------------------------------------------------
@@ -1073,10 +1070,10 @@ PoCo::Client::HTTP's C<spawn> method takes a few named parameters:
 
 =item Agent => \@list_of_agents
 
-C<Agent> defines the string that identifies the component to other
-servers.  By default, PoCo::Client::HTTP will advertise itself and its
-version.  You may want to change this to help identify your own
-programs instead.
+If a UserAgent header is not present in the HTTP::Request, a random
+one will be used from those specified by the C<Agent> parameter.  If
+none are supplied, POE::Component::Client::HTTP will advertise itself
+to the server.
 
 C<Agent> may contain a reference to a list of user agents.  If this is
 the case, PoCo::Client::HTTP will choose one of them at random for
