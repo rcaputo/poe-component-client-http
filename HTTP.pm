@@ -207,7 +207,7 @@ sub poco_weeble_request {
 
   # Create a progress postback if requested.
   my $progress_postback;
-  $progress_postback = $sender->postback($progress_event, $http_request)
+  $progress_postback = $sender->postback($progress_event, $http_request, $tag)
     if defined $progress_event;
 
   # If we have a cookie jar, have it frob our headers.  LWP rocks!
@@ -750,7 +750,8 @@ with each HTTP response.  The "progress" handler is optional and if
 installed, the component will provide progress metrics (see sample
 handler below).
 
-HTTP responses come with two list references:
+In addition to all the usual POE parameters, HTTP responses come with
+two list references:
 
   my ($request_packet, $response_packet) = @_[ARG0, ARG1];
 
@@ -777,6 +778,7 @@ download completion.
     my $call_args = $_[ARG1];    # args specific to the call
 
     my $req = $gen_args->[0];    # HTTP::Request object being serviced
+    my $tag = $gen_args->[1];    # Request ID tag from.
     my $got = $call_args->[0];   # Bytes retrieved so far.
     my $tot = $call_args->[1];   # Total bytes to be retrieved.
 
