@@ -478,7 +478,9 @@ sub poco_weeble_io_flushed {
   # bad to assume we won't get a response until a request has flushed.
   my $request_id = $heap->{wheel_to_request}->{$wheel_id};
   die unless defined $request_id;
-  $heap->{request}->{$request_id}->[REQ_STATE] = RS_IN_STATUS;
+
+  my $request = $heap->{request}->{$request_id};
+  $request->[REQ_STATE] = RS_IN_STATUS;
 }
 
 #------------------------------------------------------------------------------
