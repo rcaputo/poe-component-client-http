@@ -14,7 +14,9 @@ WriteMakefile
                       HTTP::Request  => 1.27,
                       HTTP::Response => 1.33,
                     },
-    dist         => { COMPRESS       => 'gzip -9f',
-                      SUFFIX         => 'gz',
-                    },
+    dist         =>
+    { COMPRESS   => 'gzip -9f',
+      SUFFIX     => 'gz',
+      PREOP      => qq(cvs2cl.pl -l "-d'a year ago<'" --utc --file CHANGES),
+    },
   );
