@@ -174,9 +174,6 @@ sub spawn {
 
         # I/O timeout.
         got_timeout       => \&poco_weeble_timeout,
-
-        # Sorry, don't handle signals.
-        _signal           => sub { 0 },
       },
       heap =>
       { alias       => $alias,

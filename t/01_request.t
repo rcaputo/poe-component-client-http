@@ -220,7 +220,6 @@ POE::Session->create
       got_response        => \&client_got_response,
       got_big_response    => \&client_got_big_response,
       got_stream_response => \&client_got_stream_response,
-      _signal             => sub { 0 },
     }
   );
 
