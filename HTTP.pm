@@ -9,12 +9,13 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.60';
+$VERSION = '0.61';
 
 use Carp qw(croak);
 use POSIX;
 use Symbol qw(gensym);
 use HTTP::Response;
+use HTTP::Status qw(status_message);
 use URI;
 use HTML::HeadParser;
 
@@ -782,7 +783,7 @@ sub poco_weeble_io_read {
     # bogus headers in the content?
     if (
       $request->[REQ_BUFFER] =~
-      s/^([A-Z]+(?:\/[0-9\.]+)?)?\s*(\d+)\s*(.*?)([\x0D\x0A]+)([^\x0D\x0A])/$5/x
+        s/^(HTTP\/[\d\.]+)? *(\d+) *(.*?)([\x0D\x0A]+)([^\x0D\x0A])/$5/
     ) {
       DEBUG and
         warn "wheel $wheel_id got a status line... moving to headers.\n";
@@ -800,7 +801,10 @@ sub poco_weeble_io_read {
 
       $request->[REQ_STATE]    = RS_IN_HEADERS;
       $request->[REQ_NEWLINE]  = $4;
-      $request->[REQ_RESPONSE] = HTTP::Response->new( $2, $3 );
+      $request->[REQ_RESPONSE] = HTTP::Response->new(
+        $2,
+        $3 || status_message($2),
+      );
       $request->[REQ_RESPONSE]->protocol( $protocol );
       $request->[REQ_RESPONSE]->request( $request->[REQ_REQUEST] );
     }
