@@ -17,6 +17,27 @@ Note to self: Don't forget to tag the version after a new distribution
 is released.  For example: `cvs tag -Rc v1_00 .'
 
 ---------------
+0.36 2001.05.29
+---------------
+
+Martijn van Beers sent in a patch to have the client send an entire
+query, parameters and all, and not just the path.
+
+Some servers return bad newlines in the headers.  Detect the newline
+style in the status line, and use that throughout the headers.
+
+Added a new parameter to the 'request' event: A tag that can be used
+to match requests to responses regardless of the URL.  The tag will be
+passed back with a response, in offset 1 of the request packet.
+
+Removed the requirement that an HTTP status line have a protocol type
+and version.
+
+Added the HTTP::Request to the HTTP::Response this module returns.
+The CookieJar needs this, as does everyone who expects this module to
+work properly.
+
+---------------
 0.35 2000.09.20
 ---------------
 

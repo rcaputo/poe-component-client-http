@@ -8,7 +8,7 @@ use strict;
 sub DEBUG () { 0 };
 
 use vars qw($VERSION);
-$VERSION = '0.35';
+$VERSION = '0.36';
 
 use Carp qw(croak);
 use POSIX;
@@ -26,6 +26,7 @@ sub REQ_RESPONSE    () { 4 };
 sub REQ_BUFFER      () { 5 };
 sub REQ_LAST_HEADER () { 6 };
 sub REQ_OCTETS_GOT  () { 7 };
+sub REQ_NEWLINE     () { 8 };
 
 sub RS_CONNECT      () { 0x01 };
 sub RS_SENDING      () { 0x02 };
@@ -124,7 +125,7 @@ sub poco_weeble_start {
     warn "| no_proxy  : ", &no_undef($no_proxy), "\n";
     warn "'-----------------------------------------\n";
   };
-  
+
   $heap->{alias}      = $alias;
   $heap->{timeout}    = $timeout;
   $heap->{cookie_jar} = $cookie_jar;
@@ -150,8 +151,8 @@ sub poco_weeble_stop {
 #------------------------------------------------------------------------------
 
 sub poco_weeble_request {
-  my ( $kernel, $heap, $sender, $response_event, $http_request
-     ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1];
+  my ( $kernel, $heap, $sender, $response_event, $http_request, $tag
+     ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1, ARG2];
 
   # Add a protocol if one isn't included.
   $http_request->protocol( $heap->{protocol} )
@@ -206,14 +207,15 @@ sub poco_weeble_request {
   # factory's unique ID so we can match resulting events back to the
   # proper request record.
   $heap->{request}->{$socket_factory->ID} =
-    [ $sender->postback( $response_event, $http_request ), # REQ_POSTBACK
-      $socket_factory,                                     # REQ_WHEEL
-      $http_request,                                       # REQ_REQUEST
-      RS_CONNECT,                                          # REQ_STATE
-      undef,                                               # REQ_RESPONSE
-      '',                                                  # REQ_BUFFER
-      '',                                                  # REQ_LAST_HEADER
-      0,                                                   # REQ_OCTETS_GOT
+    [ $sender->postback( $response_event, $http_request, $tag ), # REQ_POSTBACK
+      $socket_factory,   # REQ_WHEEL
+      $http_request,     # REQ_REQUEST
+      RS_CONNECT,        # REQ_STATE
+      undef,             # REQ_RESPONSE
+      '',                # REQ_BUFFER
+      '',                # REQ_LAST_HEADER
+      0,                 # REQ_OCTETS_GOT
+      "\x0D\x0A",        # REQ_NEWLINE
     ];
 
   DEBUG and
@@ -259,7 +261,7 @@ sub poco_weeble_connect_ok {
   my $http_request = $request->[REQ_REQUEST];
   my $request_string =
     ( $http_request->method() . ' ' .
-      $http_request->uri()->path() . ' ' .
+      $http_request->uri()->path_query() . ' ' .
       $http_request->protocol() . "\x0D\x0A" .
       $http_request->headers_as_string("\x0D\x0A") . "\x0D\x0A" .
       $http_request->content() # . "\x0D\x0A"
@@ -362,17 +364,28 @@ sub poco_weeble_io_read {
   # The very first line ought to be status.  If it's not, then it's
   # part of the content.
   if ($request->[REQ_STATE] & RS_IN_STATUS) {
-    # Parse a status line. -><- Assumes proper network newlines. -><-
-    # What happens if someone puts bogus headers in the content?
+    # Parse a status line. Detects the newline type, because it has to
+    # or bad servers will break it.  What happens if someone puts
+    # bogus headers in the content?
     if ( $request->[REQ_BUFFER] =~
-         s/^(HTTP\/[0-9\.]+)\s*(\d+)\s*(.*?)\x0D\x0A//
+         s/^(HTTP\/[0-9\.]+)?\s*(\d+)\s*(.*?)([\x0D\x0A]+)([^\x0D\x0A])/$5/
        ) {
       DEBUG and
         warn "wheel $wheel_id got a status line... moving to headers.\n";
 
+      my $protocol;
+      if (defined $1) {
+        $protocol = $1;
+      }
+      else {
+        $protocol= 'HTTP/0.9';
+      }
+
+      $request->[REQ_STATE]    = RS_IN_HEADERS;
+      $request->[REQ_NEWLINE]  = $4;
       $request->[REQ_RESPONSE] = HTTP::Response->new( $2, $3 );
-      $request->[REQ_RESPONSE]->protocol( $1 );
-      $request->[REQ_STATE] = RS_IN_HEADERS;
+      $request->[REQ_RESPONSE]->protocol( $protocol );
+      $request->[REQ_RESPONSE]->request( $request->[REQ_REQUEST] );
     }
 
     # No status line.  We go straight into content.  Since we don't
@@ -388,9 +401,12 @@ sub poco_weeble_io_read {
   # Parse the input for headers.  This isn't in an else clause because
   # we may go from status to content in the same read.
   if ($request->[REQ_STATE] & RS_IN_HEADERS) {
-    # Parse it by lines. -><- Assumes proper network newlines.
+    # Parse it by lines. -><- Assumes newlines are consistent with the
+    # status line.  I just know this is too much to ask.
 HEADER:
-    while ($request->[REQ_BUFFER] =~ s/^(.*?)\x0D\x0A//) {
+    while ( $request->[REQ_BUFFER] =~
+            s/^(.*?)($request->[REQ_NEWLINE]|\x0D?\x0A)//
+          ) {
       # This line means something.
       if (length $1) {
         my $line = $1;
@@ -588,6 +604,7 @@ an HTTP::Request object which defines the request.  For example:
   $kernel->post( 'ua', 'request',           # http session alias & state
                  'response',                # my state to receive responses
                  GET 'http://poe.perl.org', # a simple HTTP request
+                 'unique id',               # a tag to identify the request
                );
 
 Requests include the state to which responses will be posted.  In the
@@ -603,6 +620,7 @@ object.  This is useful for matching responses back to the requests
 that generated them.
 
   my $http_request_object = $request_packet->[0];
+  my $http_request_tag    = $request_packet->[1]; # from the 'request' post
 
 C<$response_packet> contains a reference to the resulting
 HTTP::Response object.

@@ -7,24 +7,21 @@ Abstract
 POE::Component::Client::HTTP is an asynchronous, event driven HTTP
 user agent.  It accepts events containing HTTP::Request objects, and
 it returns events carrying HTTP::Response objects.  It supports
-several simultaneous HTTP transactions which may be requested from
-several sessions.
+several simultaneous HTTP transactions from an arbitrary number of
+other sessions.
 
 ------------
 Requirements
 ------------
 
 This module requires POE, HTTP::Request, and HTTP::Response.  The
-requirements are encoded in Makefile.PL.
+requirements are encoded in Makefile.PL, so the CPAN shell should do
+the right thing.  If this is installed without the CPAN shell, the
+person installing it will have to do the right thing manually.
 
 ------------------
 Basic Installation
 ------------------
-
-[Note: This section is written in advance of PoCo::Client::HTTP's
-placement on the CPAN.  These steps are wrong, and you will find no
-joy following them.  Please read the Manual Installation section
-instead.]
 
 POE::Component::Client::HTTP may be installed through the CPAN shell
 in the usual CPAN shell manner.  This typically is:
@@ -44,13 +41,10 @@ And you can install the component from the CPAN prompt as well:
 Manual Installation
 -------------------
 
-POE::Component::Client::HTTP can also be installed manually.  The
-latest CPAN version can be found at
-<ftp://ftp.cpan.org/pub/CPAN/authors/id/R/RC/RCAPUTO/> or in a
-similarly named directory at your favorite CPAN mirror.  The most
-recent development snapshot, which only rarely contains hideous
-show-stopping bugs, is available from POE's web site at
-<http://poe.perl.org/>.
+POE::Component::Client::HTTP can also be installed manually.
+<ftp://ftp.cpan.org/pub/CPAN/authors/id/R/RC/RCAPUTO/> or a similarly
+named directory at your favorite CPAN mirror should hold the latest
+version.
 
 Downloading and unpacking the distribution are left as exercises for
 the reader.  To build and test it:
@@ -69,6 +63,6 @@ When you're ready to install the component:
 
 It should now be ready to use.
 
----------------------------
-EOF: Thank you for reading.
----------------------------
+Thanks for reading!
+
+-- Rocco Caputo / troc@netrus.net / poe.perl.org / poe.sourceforge.net
