@@ -9,7 +9,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.53';
+$VERSION = '0.54';
 
 use Carp qw(croak);
 use POSIX;
@@ -138,8 +138,8 @@ sub spawn {
 
   # Process HTTP_PROXY and NO_PROXY environment variables.
 
-  $proxy    = $ENV{HTTP_PROXY} unless defined $proxy;
-  $no_proxy = $ENV{NO_PROXY}   unless defined $no_proxy;
+  $proxy    = $ENV{HTTP_PROXY} || $ENV{http_proxy} unless defined $proxy;
+  $no_proxy = $ENV{NO_PROXY}   || $ENV{no_proxy}   unless defined $no_proxy;
 
   # Translate environment variable formats into internal versions.
 
@@ -259,6 +259,7 @@ sub poco_weeble_request {
              and length $http_request->protocol()
            );
 
+
   # MEXNIX 2002-06-01: If we have a proxy set, and the request URI is
   # not in our no_proxy, then use the proxy.  Otherwise use the
   # request URI.
@@ -273,17 +274,8 @@ sub poco_weeble_request {
   };
   warn($@), return if $@;
 
-  if (defined $heap->{proxy} and not _in_no_proxy($host, $heap->{no_proxy})) {
-    my $proxy = $heap->{proxy}->[rand @{$heap->{proxy}}];
-    $host = $proxy->[PROXY_HOST];
-    $port = $proxy->[PROXY_PORT];
-    $using_proxy = TRUE;
-  }
-  else {
-    $using_proxy = FALSE;
-  }
-
-  # Add a host header if one isn't included.
+  # Add a host header if one isn't included.  Must do this before 
+  # we reset the $host for the proxy!
   unless ( defined $http_request->header('Host')
            and length $http_request->header('Host')
          ) {
@@ -294,6 +286,16 @@ sub poco_weeble_request {
     else {
       $http_request->header( Host => "$host:$port" )
     }
+  }
+
+  if (defined $heap->{proxy} and not _in_no_proxy($host, $heap->{no_proxy})) {
+    my $proxy = $heap->{proxy}->[rand @{$heap->{proxy}}];
+    $host = $proxy->[PROXY_HOST];
+    $port = $proxy->[PROXY_PORT];
+    $using_proxy = TRUE;
+  }
+  else {
+    $using_proxy = FALSE;
   }
 
   # Add an agent header if one isn't included.
@@ -360,6 +362,7 @@ sub poco_weeble_request {
   # for IPv6 addresses here, too.
 
   if (HAS_CLIENT_DNS and $host !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) {
+
     if (exists $heap->{resolve}->{$host}) {
       DEBUG and warn "DNS: $host is piggybacking on a pending lookup.\n";
       push @{$heap->{resolve}->{$host}}, $request_id;
@@ -1132,8 +1135,8 @@ Under normal circumstances, it should be left to its default value:
 
 C<Proxy> specifies one or more proxy hosts that requests will be
 passed through.  If not specified, proxy servers will be taken from
-the HTTP_PROXY environment variable.  If Proxy and HTTP_PROXY do not
-exist, then no proxying will occur.
+the HTTP_PROXY (or http_proxy) environment variable.  No proxying will
+occur unless Proxy is set or one of the environment variables exists.
 
 The proxy can be specified either as a host and port, or as one or
 more URLs.  Proxy URLs must specify the proxy port, even if it is 80.
