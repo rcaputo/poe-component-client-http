@@ -8,7 +8,7 @@ use strict;
 sub DEBUG () { 0 };
 
 use vars qw($VERSION);
-$VERSION = '0.33';
+$VERSION = '0.34';
 
 use Carp qw(croak);
 use POSIX;
