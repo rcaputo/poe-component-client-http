@@ -633,11 +633,11 @@ sub poco_weeble_io_error {
       $heap->{cookie_jar}->extract_cookies($request->[REQ_RESPONSE]);
     }
 
-    # If we're streaming, the response is HTTP::Headers and undef to
-    # signal the end of the stream.  Otherwise it's the entire
-    # HTTP::Response object we've carefully built.
+    # If we're streaming, the response is HTTP::Response without
+    # content and undef to signal the end of the stream.  Otherwise
+    # it's the entire HTTP::Response object we've carefully built.
     if ($heap->{streaming}) {
-      $request->[REQ_POSTBACK]->( $request->[REQ_RESPONSE]->headers(),
+      $request->[REQ_POSTBACK]->( $request->[REQ_RESPONSE],
                                   undef
                                 );
     }
@@ -802,7 +802,7 @@ HEADER:
     # Otherwise add the new octets to the response's content.  -><-
     # This should only add up to content-length octets total!
     if ($heap->{streams}) {
-      $request->[REQ_POSTBACK]->( $request->[REQ_RESPONSE]->headers(),
+      $request->[REQ_POSTBACK]->( $request->[REQ_RESPONSE],
                                   $request->[REQ_BUFFER]
                                 );
     }
@@ -872,8 +872,7 @@ HEADER:
       }
       else {
         $request->[REQ_RESPONSE] =
-          HTTP::Response->new( 400, "Response too large (and no headers)"
-                             );
+          HTTP::Response->new( 400, "Response too large (and no headers)" );
       }
 
       $request->[REQ_STATE] = RS_DONE;
@@ -990,11 +989,11 @@ POE::Component::Client::HTTP - a HTTP user-agent component
     # HTTP::Request
     my $request_object  = $request_packet->[0];
 
-    # HTTP::Response or HTTP::Headers (if streaming)
+    # HTTP::Response
     my $response_object = $response_packet->[0];
 
     my $stream_chunk;
-    if ($response_object->isa("HTTP::Headers")) {
+    if (! defined($response_object->content)) {
       $stream_chunk = $response_packet->[1];
     }
 
@@ -1116,13 +1115,14 @@ fetch songs that never end.  Yes, they go on and on, my friend.
 
 When C<Streaming> is set to nonzero, however, the response handler
 receives chunks of up to OCTETS octets apiece.  The response handler
-accepts slightly different parameters in this case.  ARG0 is an
-HTTP::Headers object, and ARG1 contains a a chunk of raw response
+accepts slightly different parameters in this case.  ARG0 is also an
+HTTP::Response object but it does not contain response content,
+and ARG1 contains a a chunk of raw response
 content, or undef if the stream has ended.
 
   sub streaming_response_handler {
     my $response_packet = $_[ARG1];
-    my ($headers, $data) = @$response_packet;
+    my ($response, $data) = @$response_packet;
     print SAVED_STREAM $data if defined $data;
   }
 
