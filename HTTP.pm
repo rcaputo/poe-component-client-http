@@ -8,10 +8,11 @@ use strict;
 sub DEBUG () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.43';
+$VERSION = '0.41';
 
 use Carp qw(croak);
 use POSIX;
+use Symbol qw(gensym);
 use HTTP::Response;
 
 use POE qw( Wheel::SocketFactory Wheel::ReadWrite
@@ -47,6 +48,18 @@ sub FALSE () { 0 }
 # Unique request ID, independent of wheel and timer IDs.
 
 my $request_seq = 0;
+
+# Bring in HTTPS support.
+
+BEGIN {
+  eval "use POE::Component::Client::HTTP::SSL";
+  if ($@) {
+    eval "sub HAS_SSL () { 0 }";
+  }
+  else {
+    eval "sub HAS_SSL () { 1 }";
+  }
+};
 
 #------------------------------------------------------------------------------
 # Spawn a new PoCo::Client::HTTP session.  This basically is a
@@ -210,6 +223,10 @@ sub poco_weeble_request {
              and length $http_request->protocol()
            );
 
+  # Croak if no SSL and we need it.
+  croak "POE::Component::Client::HTTP requires Net::SSLeay::Handle for https"
+    if $http_request->uri->scheme() eq 'https' and !HAS_SSL;
+
   # MEXNIX 2002-06-01: If we have a proxy set, and the request URI is
   # not in our no_proxy, then use the proxy.  Otherwise use the
   # request URI.
@@ -320,6 +337,26 @@ sub poco_weeble_connect_ok {
   die unless defined $request_id;
 
   my $request = $heap->{request}->{$request_id};
+
+  # Switch the handle to SSL if we're doing that.
+  if ($request->[REQ_REQUEST]->uri->scheme() eq 'https') {
+    DEBUG and warn "wheel $wheel_id switching to SSL...\n";
+
+    # Net::SSLeay needs nonblocking for setup.
+    my $old_socket = $socket;
+    my $flags = fcntl($old_socket, F_GETFL, 0) or die $!;
+    until (fcntl($old_socket, F_SETFL, $flags & ~O_NONBLOCK)) {
+      die $! unless $! == EAGAIN or $! == EWOULDBLOCK;
+    }
+
+    $socket = gensym();
+    tie(*$socket,
+        "POE::Component::Client::HTTP::SSL",
+        $old_socket
+       ) or die $!;
+
+    DEBUG and warn "wheel $wheel_id switched to SSL...\n";
+  }
 
   # Make a ReadWrite wheel to interact on the socket.
   my $new_wheel = POE::Wheel::ReadWrite->new
@@ -923,7 +960,7 @@ There is no support for CGI_PROXY or CgiProxy.
 
 =head1 AUTHOR & COPYRIGHTS
 
-POE::Component::Client::HTTP is Copyright 1999-2000 by Rocco Caputo.
+POE::Component::Client::HTTP is Copyright 1999-2002 by Rocco Caputo.
 All rights are reserved.  POE::Component::Client::HTTP is free
 software; you may redistribute it and/or modify it under the same
 terms as Perl itself.

@@ -13,9 +13,9 @@ sub DEBUG          () { 0 }
 sub TEST_BIG_STUFF () { 0 }  # requires localhost:19
 
 $| = 1;
-print "1..3\n";
+print "1..4\n";
 
-my @test_results = ( 'not ok 1', 'not ok 2', 'not ok 3' );
+my @test_results = ( 'not ok 1', 'not ok 2', 'not ok 3', 'not ok 4' );
 
 #------------------------------------------------------------------------------
 
@@ -40,6 +40,11 @@ sub client_start {
 
   $kernel->post( weeble => request => got_response =>
                  GET 'http://poe.perl.org/misc/test.cgi?cgi_field_fiv=555',
+               );
+
+  my $secure_request = GET 'https://sourceforge.net/projects/poe/';
+  $kernel->post( weeble => request => got_response =>
+                 $secure_request,
                );
 
   if (TEST_BIG_STUFF) {
@@ -79,6 +84,10 @@ sub client_got_response {
     $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
     $test_results[1] = 'ok 2' if $response_string =~ /cgi_field_six/;
     $test_results[2] = 'ok 3' if $response_string =~ /cgi_field_fiv/;
+  }
+  elsif ($http_response->code == 302) {
+    my $response_string = $http_response->as_string();
+    $test_results[3] = 'ok 4' if $response_string =~ /projects\/poe/;
   }
 }
 
