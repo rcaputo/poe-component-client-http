@@ -9,7 +9,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.54';
+$VERSION = '0.55';
 
 use Carp qw(croak);
 use POSIX;
@@ -177,6 +177,7 @@ sub spawn {
 
         # Public interface.
         request => \&poco_weeble_request,
+	pending_requests_count => \&poco_weeble_pending_requests_count,
 
         # Net::DNS interface.
         got_dns_response  => \&poco_weeble_dns_answer,
@@ -244,6 +245,12 @@ sub poco_weeble_stop {
   delete $heap->{request};
 
   DEBUG and warn "weeble stopped.\n";
+}
+
+sub poco_weeble_pending_requests_count {
+  my ($heap) = $_[HEAP];
+  my $r = $heap->{request} || {};
+  return keys %$r;
 }
 
 #------------------------------------------------------------------------------
@@ -1219,6 +1226,12 @@ HTTP::Response object.
 
 Please see the HTTP::Request and HTTP::Response manpages for more
 information.
+
+There's also a pending_requests_count state that returns the number of
+requests currently being processed.  To receive the return value, it
+must be invoked with $kernel->call().
+
+  my $count = $kernel->call('ua' => 'pending_requests_count');
 
 The example progress handler shows how to calculate a percentage of
 download completion.

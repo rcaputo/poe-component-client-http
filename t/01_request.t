@@ -15,10 +15,10 @@ sub MAX_BIG_REQUEST_SIZE  () { 4096 }
 sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
 
 $| = 1;
-print "1..8\n";
+print "1..9\n";
 
 my @test_results = ( 'not ok 1', 'not ok 2', 'not ok 3', 'not ok 4',
-                     'ok 5', 'not ok 6', 'not ok 7', 'not ok 8',
+                     'ok 5', 'not ok 6', 'not ok 7', 'not ok 8', 'not ok 9',
                    );
 
 BEGIN {
@@ -79,6 +79,18 @@ sub client_start {
   $kernel->post( streamer => request => got_stream_response =>
                  GET 'http://poe.perl.org/misc/stream-test.cgi'
                );
+
+  $kernel->yield('check_counts', 9, (HAS_SSL ? 7 : 6));
+
+}
+
+sub client_check_counts {
+  my ($kernel, $test_number, $expected_count) = @_[KERNEL, ARG0, ARG1];
+  # a better test would be to also keep track of the responses we are
+  # receiving and checking that pending_requests_count decrements properly.
+  my $count = $kernel->call( weeble => 'pending_requests_count' );
+  $test_results[$test_number-1] = "ok $test_number"
+    if $expected_count == $count;
 }
 
 sub client_stop {
@@ -89,7 +101,7 @@ sub client_stop {
 }
 
 sub client_got_response {
-  my ($heap, $request_packet, $response_packet) = @_[HEAP, ARG0, ARG1];
+  my ($heap, $kernel, $request_packet, $response_packet) = @_[HEAP, KERNEL, ARG0, ARG1];
   my $http_request  = $request_packet->[0];
   my $http_response = $response_packet->[0];
 
@@ -220,6 +232,7 @@ POE::Session->create
       got_response        => \&client_got_response,
       got_big_response    => \&client_got_big_response,
       got_stream_response => \&client_got_stream_response,
+      check_counts        => \&client_check_counts,
     }
   );
 
