@@ -19,6 +19,7 @@ WriteMakefile
     PREREQ_PM    => { 'POE'                 => 0.1106,
                       'HTTP::Request'       => 1.27,
                       'HTTP::Response'      => 1.33,
+                      'Net::SSLeay'         => 1.17,
                       'Net::SSLeay::Handle' => 0.61,
                       'URI'                 => 1.11,
                     },
