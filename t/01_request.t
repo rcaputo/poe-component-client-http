@@ -79,7 +79,10 @@ sub client_got_response {
 #------------------------------------------------------------------------------
 
 # Create a weeble component.
-POE::Component::Client::HTTP->spawn( MaxSize => 4096 );
+POE::Component::Client::HTTP->spawn
+  ( MaxSize => 4096,
+    Timeout => 180,
+  );
 
 # Create a session that will make some requests.
 POE::Session->create

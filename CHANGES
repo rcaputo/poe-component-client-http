@@ -17,6 +17,15 @@ Note to self: Don't forget to tag the version after a new distribution
 is released.  For example: `cvs tag -Rc v1_00 .'
 
 ---------------
+0.38 2001.12.06
+---------------
+
+Fixed the SYNOPSIS per Jason Boxman's recommendation.
+
+Made the Timeout parameter significant.  There was no code behind it
+before now.
+
+---------------
 0.37 2001.10.15
 ---------------
 

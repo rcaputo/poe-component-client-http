@@ -8,7 +8,7 @@ use strict;
 sub DEBUG () { 0 };
 
 use vars qw($VERSION);
-$VERSION = '0.37';
+$VERSION = '0.38';
 
 use Carp qw(croak);
 use POSIX;
@@ -18,22 +18,27 @@ use POE qw( Wheel::SocketFactory Wheel::ReadWrite
             Driver::SysRW Filter::Stream
           );
 
-sub REQ_POSTBACK    () { 0 };
-sub REQ_WHEEL       () { 1 };
-sub REQ_REQUEST     () { 2 };
-sub REQ_STATE       () { 3 };
-sub REQ_RESPONSE    () { 4 };
-sub REQ_BUFFER      () { 5 };
-sub REQ_LAST_HEADER () { 6 };
-sub REQ_OCTETS_GOT  () { 7 };
-sub REQ_NEWLINE     () { 8 };
+sub REQ_POSTBACK    () { 0 }
+sub REQ_WHEEL       () { 1 }
+sub REQ_REQUEST     () { 2 }
+sub REQ_STATE       () { 3 }
+sub REQ_RESPONSE    () { 4 }
+sub REQ_BUFFER      () { 5 }
+sub REQ_LAST_HEADER () { 6 }
+sub REQ_OCTETS_GOT  () { 7 }
+sub REQ_NEWLINE     () { 8 }
+sub REQ_TIMER       () { 9 }
 
-sub RS_CONNECT      () { 0x01 };
-sub RS_SENDING      () { 0x02 };
-sub RS_IN_STATUS    () { 0x04 };
-sub RS_IN_HEADERS   () { 0x08 };
-sub RS_IN_CONTENT   () { 0x10 };
-sub RS_DONE         () { 0x20 };
+sub RS_CONNECT      () { 0x01 }
+sub RS_SENDING      () { 0x02 }
+sub RS_IN_STATUS    () { 0x04 }
+sub RS_IN_HEADERS   () { 0x08 }
+sub RS_IN_CONTENT   () { 0x10 }
+sub RS_DONE         () { 0x20 }
+
+# Unique request ID, independent of wheel and timer IDs.
+
+my $request_seq = 0;
 
 #------------------------------------------------------------------------------
 # Spawn a new PoCo::Client::HTTP session.  This basically is a
@@ -204,6 +209,9 @@ sub poco_weeble_request {
   my $host = $http_request->uri()->host();
   my $port = $http_request->uri()->port();
 
+  # Get a unique request ID.
+  my $request_id = ++$request_seq;
+
   # Create a socket factory.
   my $socket_factory =
     POE::Wheel::SocketFactory->new
@@ -213,10 +221,14 @@ sub poco_weeble_request {
         FailureState  => 'got_connect_error',
       );
 
-  # Record information about the request; key it on the socket
-  # factory's unique ID so we can match resulting events back to the
-  # proper request record.
-  $heap->{request}->{$socket_factory->ID} =
+  # Create a timeout timer.
+  my $timer_id = $kernel->delay_set( got_timeout => $heap->{timeout} =>
+                                     $request_id
+                                   );
+
+  # Record information about the request.
+
+  $heap->{request}->{$request_id} =
     [ $sender->postback( $response_event, $http_request, $tag ), # REQ_POSTBACK
       $socket_factory,   # REQ_WHEEL
       $http_request,     # REQ_REQUEST
@@ -226,7 +238,12 @@ sub poco_weeble_request {
       '',                # REQ_LAST_HEADER
       0,                 # REQ_OCTETS_GOT
       "\x0D\x0A",        # REQ_NEWLINE
+      $timer_id,         # REQ_TIMER
     ];
+
+  # Cross-reference the wheel and timer IDs back to the request.
+  $heap->{timer_to_request}->{$timer_id} = $request_id;
+  $heap->{wheel_to_request}->{$socket_factory->ID()} = $request_id;
 
   DEBUG and
     warn( "wheel ", $socket_factory->ID,
@@ -241,28 +258,34 @@ sub poco_weeble_connect_ok {
 
   DEBUG and warn "wheel $wheel_id connected ok...\n";
 
-  # We'll be replacing the SocketFactory wheel with a ReadWrite wheel,
-  # which will have a new ID.  Remove the request from the old ID.
-  my $request = delete $heap->{request}->{$wheel_id};
+  # Remove the old wheel ID from the look-up table.
+  my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
+  die unless defined $request_id;
 
-  # Clear the old wheel, then create the new one.  It's important to
-  # do this in this particular order.
-  $request->[REQ_WHEEL] = undef;
-  $request->[REQ_WHEEL] =
-    POE::Wheel::ReadWrite->new
-      ( Handle       => $socket,
-        Driver       => POE::Driver::SysRW->new(),
-        Filter       => POE::Filter::Stream->new(),
-        InputState   => 'got_socket_input',
-        FlushedState => 'got_socket_flush',
-        ErrorState   => 'got_socket_error',
-      );
+  my $request = $heap->{request}->{$request_id};
 
-  # Enter the request under the new wheel ID.
-  $heap->{request}->{$request->[REQ_WHEEL]->ID} = $request;
+  # Make a ReadWrite wheel to interact on the socket.
+  my $new_wheel = POE::Wheel::ReadWrite->new
+    ( Handle       => $socket,
+      Driver       => POE::Driver::SysRW->new(),
+      Filter       => POE::Filter::Stream->new(),
+      InputState   => 'got_socket_input',
+      FlushedState => 'got_socket_flush',
+      ErrorState   => 'got_socket_error',
+    );
+
+  # Add the new wheel ID to the lookup table.
+
+  $heap->{wheel_to_request}->{ $new_wheel->ID() } = $request_id;
+
+  # Switch wheels.  This is a bit cumbersome, but it works around a
+  # bug in older versions of POE.
+
+  undef $request->[REQ_WHEEL];
+  $request->[REQ_WHEEL] = $new_wheel;
 
   # We're now in a sending state.
-  $heap->{request}->{$request->[REQ_WHEEL]->ID}->[REQ_STATE] = RS_SENDING;
+  $request->[REQ_STATE] = RS_SENDING;
 
   # Put the request.  HTTP::Request's as_string() method isn't quite
   # right.  It uses the full URL on the request line, so we have to
@@ -292,17 +315,54 @@ sub poco_weeble_connect_ok {
 #------------------------------------------------------------------------------
 
 sub poco_weeble_connect_error {
-  my ($heap, $operation, $errnum, $errstr, $wheel_id) = @_[HEAP, ARG0..ARG3];
+  my ($kernel, $heap, $operation, $errnum, $errstr, $wheel_id) =
+    @_[KERNEL, HEAP, ARG0..ARG3];
 
   DEBUG and
     warn "wheel $wheel_id encountered $operation error $errnum: $errstr\n";
 
-  # Drop the wheel.
-  my $request = delete $heap->{request}->{$wheel_id};
+  # Drop the wheel and its cross-references.
+  my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
+  die unless defined $request_id;
+
+  my $request = delete $heap->{request}->{$request_id};
+
+  if (defined $request->[REQ_TIMER]) {
+    my $alarm_id =
+      delete $heap->{timer_to_request}->{ $request->[REQ_TIMER] };
+    $kernel->alarm_remove( $alarm_id );
+    undef $request->[REQ_TIMER];
+  }
 
   # Post an error response back to the requesting session.
   $request->[REQ_POSTBACK]->
     ( HTTP::Response->new( 400, "$operation error $errnum: $errstr" )
+    );
+}
+
+#------------------------------------------------------------------------------
+
+sub poco_weeble_timeout {
+  my ($kernel, $heap, $request_id) = @_[KERNEL, HEAP, ARG0];
+
+  DEBUG and warn "request $request_id timed out\n";
+
+  # Drop the wheel and its cross-references.
+  my $request = delete $heap->{request}->{$request_id};
+
+  if (defined $request->[REQ_WHEEL]) {
+    delete $heap->{wheel_to_request}->{ $request->[REQ_WHEEL]->ID() };
+  }
+
+  # No need to remove the alarm here because it's already gone.
+  if (defined $request->[REQ_TIMER]) {
+    delete $heap->{timer_to_request}->{ $request->[REQ_TIMER] };
+    undef $request->[REQ_TIMER];
+  }
+
+  # Post an error response back to the requesting session.
+  $request->[REQ_POSTBACK]->
+    ( HTTP::Response->new( 400, "Request timed out" )
     );
 }
 
@@ -315,19 +375,31 @@ sub poco_weeble_io_flushed {
 
   # We sent the request.  Now we're looking for a response.  It may be
   # bad to assume we won't get a response until a request has flushed.
-  $heap->{request}->{$wheel_id}->[REQ_STATE] = RS_IN_STATUS;
+  my $request_id = $heap->{wheel_to_request}->{$wheel_id};
+  die unless defined $request_id;
+  $heap->{request}->{$request_id}->[REQ_STATE] = RS_IN_STATUS;
 }
 
 #------------------------------------------------------------------------------
 
 sub poco_weeble_io_error {
-  my ($heap, $operation, $errnum, $errstr, $wheel_id) = @_[HEAP, ARG0..ARG3];
+  my ($kernel, $heap, $operation, $errnum, $errstr, $wheel_id) =
+    @_[KERNEL, HEAP, ARG0..ARG3];
 
   DEBUG and
     warn "wheel $wheel_id encountered $operation error $errnum: $errstr\n";
 
   # Drop the wheel.
-  my $request = delete $heap->{request}->{$wheel_id};
+  my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
+  my $request = delete $heap->{request}->{$request_id};
+
+  # Stop the timeout timer for this wheel, too.
+  my $timer_id = $request->[REQ_TIMER];
+  if (exists $heap->{timer_to_request}->{$timer_id}) {
+    $kernel->alarm_remove( $timer_id );
+    delete $heap->{timer_to_request}->{$timer_id};
+    undef $request->[REQ_TIMER];
+  }
 
   # If there was a non-zero error, then something bad happened.  Post
   # an error response back.
@@ -363,8 +435,10 @@ sub poco_weeble_io_error {
 # in the other direction.
 
 sub poco_weeble_io_read {
-  my ($heap, $input, $wheel_id) = @_[HEAP, ARG0, ARG1];
-  my $request = $heap->{request}->{$wheel_id};
+  my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
+  my $request_id = $heap->{wheel_to_request}->{$wheel_id};
+  die unless defined $request_id;
+  my $request = $heap->{request}->{$request_id};
 
   DEBUG and warn "wheel $wheel_id got input...\n";
 
@@ -535,7 +609,17 @@ HEADER:
       $request->[REQ_STATE] = RS_DONE;
 
       # Hang up on purpose.
-      delete $heap->{request}->{$wheel_id};
+      my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
+      my $request = delete $heap->{request}->{$request_id};
+
+      # Stop the timeout timer for this wheel, too.
+      my $timer_id = $request->[REQ_TIMER];
+      if (defined $timer_id) {
+        $kernel->alarm_remove( $timer_id );
+        delete $heap->{timer_to_request}->{$timer_id};
+        undef $request->[REQ_TIMER];
+      }
+
       $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE]);
     }
   }
@@ -583,7 +667,7 @@ POE::Component::Client::HTTP - a HTTP user-agent component
     print "*" x 78, "\n";
     print "*** their response:\n";
     print "-' x 78, "\n";
-    print $request_object->as_string();
+    print $response_object->as_string();
     print "*" x 78, "\n";
   }
 
