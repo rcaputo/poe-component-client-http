@@ -828,6 +828,11 @@ sub poco_weeble_io_read {
       $request->[REQ_RESPONSE] = HTTP::Response->new();
       $request->[REQ_STATE] = RS_IN_CONTENT;
     }
+
+    # We need more data to match the status line.
+    else {
+      return;
+    }
   }
 
   # Parse the input for headers.  This isn't in an else clause because
