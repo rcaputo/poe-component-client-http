@@ -8,7 +8,7 @@ use strict;
 sub DEBUG () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.43';
+$VERSION = '0.44';
 
 use Carp qw(croak);
 use POSIX;
@@ -18,6 +18,15 @@ use HTTP::Response;
 use POE qw( Wheel::SocketFactory Wheel::ReadWrite
             Driver::SysRW Filter::Stream
           );
+
+BEGIN {
+  my $has_client_dns = 0;
+  eval {
+    require POE::Component::Client::DNS;
+    $has_client_dns = 1;
+  };
+  eval "sub HAS_CLIENT_DNS () { $has_client_dns }";
+}
 
 sub REQ_POSTBACK      () {  0 }
 sub REQ_WHEEL         () {  1 }
@@ -31,6 +40,8 @@ sub REQ_NEWLINE       () {  8 }
 sub REQ_TIMER         () {  9 }
 sub REQ_PROG_POSTBACK () { 10 }
 sub REQ_USING_PROXY   () { 11 }
+sub REQ_HOST          () { 12 }
+sub REQ_PORT          () { 13 }
 
 sub RS_CONNECT      () { 0x01 }
 sub RS_SENDING      () { 0x02 }
@@ -52,14 +63,18 @@ my $request_seq = 0;
 # Bring in HTTPS support.
 
 BEGIN {
-  eval "use POE::Component::Client::HTTP::SSL";
-  if ($@) {
-    eval "sub HAS_SSL () { 0 }";
-  }
-  else {
-    eval "sub HAS_SSL () { 1 }";
-  }
-};
+  my $has_ssl = 0;
+  eval {
+    require POE::Component::Client::HTTP::SSL;
+    $has_ssl = 1;
+  };
+  eval "sub HAS_SSL () { $has_ssl }";
+}
+
+# Start a DNS client if we can.
+if (HAS_CLIENT_DNS) {
+  POE::Component::Client::DNS->spawn( Alias => "poco_weeble_resolver" );
+}
 
 #------------------------------------------------------------------------------
 # Spawn a new PoCo::Client::HTTP session.  This basically is a
@@ -132,6 +147,10 @@ sub spawn {
 
         # Public interface.
         request => \&poco_weeble_request,
+
+        # Net::DNS interface.
+        got_dns_response  => \&poco_weeble_dns_answer,
+        do_connect        => \&poco_weeble_do_connect,
 
         # SocketFactory interface.
         got_connect_done  => \&poco_weeble_connect_ok,
@@ -225,8 +244,10 @@ sub poco_weeble_request {
            );
 
   # Croak if no SSL and we need it.
-  croak "POE::Component::Client::HTTP requires Net::SSLeay::Handle for https"
-    if $http_request->uri->scheme() eq 'https' and !HAS_SSL;
+  if ($http_request->uri->scheme() eq 'https') {
+    croak "POE::Component::Client::HTTP requires Net::SSLeay::Handle for https"
+      unless HAS_SSL;
+  }
 
   # MEXNIX 2002-06-01: If we have a proxy set, and the request URI is
   # not in our no_proxy, then use the proxy.  Otherwise use the
@@ -285,25 +306,34 @@ sub poco_weeble_request {
   # Get a unique request ID.
   my $request_id = ++$request_seq;
 
-  # Create a socket factory.
-  my $socket_factory =
-    POE::Wheel::SocketFactory->new
-      ( RemoteAddress => $host,
-        RemotePort    => $port,
-        SuccessEvent  => 'got_connect_done',
-        FailureEvent  => 'got_connect_error',
-      );
+  # If non-blocking DNS is available, and the host was supplied as a
+  # name, then go through POE::Component::Client::DNS.  Otherwise go
+  # directly to the SocketFactory stage.  -><- Should probably check
+  # for IPv6 addresses here, too.
 
-  # Create a timeout timer.
-  my $timer_id = $kernel->delay_set( got_timeout => $heap->{timeout} =>
-                                     $request_id
-                                   );
+  if (HAS_CLIENT_DNS and $host !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) {
+    if (exists $heap->{resolve}->{$host}) {
+      DEBUG and warn "DNS: $host is piggybacking on a pending lookup.\n";
+      push @{$heap->{resolve}->{$host}}, $request_id;
+    }
+    else {
+      DEBUG and warn "DNS: $host is being looked up in the background.\n";
+      $heap->{resolve}->{$host} = [ $request_id ];
+      $kernel->post( poco_weeble_resolver =>
+                     resolve => got_dns_response => $host => "A", "IN"
+                   );
+    }
+  }
+  else {
+    DEBUG and warn "DNS: $host may block while it's looked up.\n";
+    $kernel->yield( do_connect => $request_id, $host );
+  }
 
   # Record information about the request.
 
   $heap->{request}->{$request_id} =
     [ $sender->postback( $response_event, $http_request, $tag ), # REQ_POSTBACK
-      $socket_factory,    # REQ_WHEEL
+      undef,              # REQ_WHEEL
       $http_request,      # REQ_REQUEST
       RS_CONNECT,         # REQ_STATE
       undef,              # REQ_RESPONSE
@@ -311,18 +341,76 @@ sub poco_weeble_request {
       '',                 # REQ_LAST_HEADER
       0,                  # REQ_OCTETS_GOT
       "\x0D\x0A",         # REQ_NEWLINE
-      $timer_id,          # REQ_TIMER
+      undef,              # REQ_TIMER
       $progress_postback, # REQ_PROG_POSTBACK
       $using_proxy,       # REQ_USING_PROXY
+      $host,              # REQ_HOST
+      $port,              # REQ_PORT
     ];
+ }
+
+#------------------------------------------------------------------------------
+# Non-blocking DNS lookup stage.
+
+sub poco_weeble_dns_answer {
+  my ($kernel, $heap) = @_[KERNEL, HEAP];
+  my $request_address = $_[ARG0]->[0];
+  my $response_object = $_[ARG1]->[0];
+
+  my $requests = delete $heap->{resolve}->{$request_address};
+
+  warn $request_address;
+
+  if (defined $requests and defined $response_object) {
+    foreach my $answer ($response_object->answer()) {
+      next unless $answer->type eq "A";
+
+      DEBUG and
+        warn "DNS: $request_address resolves to ", $answer->rdatastr(), "\n";
+
+      foreach my $request_id (@$requests) {
+        $kernel->yield( do_connect => $request_id, $answer->rdatastr );
+      }
+      return;
+    }
+  }
+
+  die;
+  # fabricate an error response
+  # send it back
+  # clean up request
+}
+
+#------------------------------------------------------------------------------
+
+sub poco_weeble_do_connect {
+  my ($kernel, $heap, $request_id, $address) = @_[KERNEL, HEAP, ARG0, ARG1];
+
+  my $request = $heap->{request}->{$request_id};
+
+  # Create a socket factory.
+  my $socket_factory =
+    $request->[REQ_WHEEL] =
+      POE::Wheel::SocketFactory->new
+        ( RemoteAddress => $address,
+          RemotePort    => $request->[REQ_PORT],
+          SuccessEvent  => 'got_connect_done',
+          FailureEvent  => 'got_connect_error',
+        );
+
+  # Create a timeout timer.
+  $request->[REQ_TIMER] =
+    $kernel->delay_set( got_timeout => $heap->{timeout} =>
+                        $request_id
+                      );
 
   # Cross-reference the wheel and timer IDs back to the request.
-  $heap->{timer_to_request}->{$timer_id} = $request_id;
+  $heap->{timer_to_request}->{$request->[REQ_TIMER]} = $request_id;
   $heap->{wheel_to_request}->{$socket_factory->ID()} = $request_id;
 
   DEBUG and
     warn( "wheel ", $socket_factory->ID,
-          " is connecting to $host : $port ...\n"
+          " is connecting to $request->[REQ_HOST] : $request->[REQ_PORT] ...\n"
         );
 }
 
@@ -362,7 +450,7 @@ sub poco_weeble_connect_ok {
   # Make a ReadWrite wheel to interact on the socket.
   my $new_wheel = POE::Wheel::ReadWrite->new
     ( Handle       => $socket,
-      Driver       => POE::Driver::SysRW->new(),
+      Driver       => POE::Driver::SysRW->new(BlockSize => 1024),
       Filter       => POE::Filter::Stream->new(),
       InputEvent   => 'got_socket_input',
       FlushedEvent => 'got_socket_flush',
@@ -795,6 +883,10 @@ POE::Component::Client::HTTP - a HTTP user-agent component
 POE::Component::Client::HTTP is an HTTP user-agent for POE.  It lets
 other sessions run while HTTP transactions are being processed, and it
 lets several HTTP transactions be processed in parallel.
+
+If POE::Component::Client::DNS is also installed, Client::HTTP will
+use it to resolve hosts without blocking.  Otherwise it will use
+gethostbyname(), which may have performance problems.
 
 HTTP client components are not proper objects.  Instead of being
 created, as most objects are, they are "spawned" as separate sessions.
