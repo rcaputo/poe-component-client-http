@@ -5,10 +5,10 @@ package POE::Component::Client::HTTP;
 
 use strict;
 
-sub DEBUG () { 0 };
+sub DEBUG () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.38';
+$VERSION = '0.42';
 
 use Carp qw(croak);
 use POSIX;
@@ -18,16 +18,17 @@ use POE qw( Wheel::SocketFactory Wheel::ReadWrite
             Driver::SysRW Filter::Stream
           );
 
-sub REQ_POSTBACK    () { 0 }
-sub REQ_WHEEL       () { 1 }
-sub REQ_REQUEST     () { 2 }
-sub REQ_STATE       () { 3 }
-sub REQ_RESPONSE    () { 4 }
-sub REQ_BUFFER      () { 5 }
-sub REQ_LAST_HEADER () { 6 }
-sub REQ_OCTETS_GOT  () { 7 }
-sub REQ_NEWLINE     () { 8 }
-sub REQ_TIMER       () { 9 }
+sub REQ_POSTBACK      () {  0 }
+sub REQ_WHEEL         () {  1 }
+sub REQ_REQUEST       () {  2 }
+sub REQ_STATE         () {  3 }
+sub REQ_RESPONSE      () {  4 }
+sub REQ_BUFFER        () {  5 }
+sub REQ_LAST_HEADER   () {  6 }
+sub REQ_OCTETS_GOT    () {  7 }
+sub REQ_NEWLINE       () {  8 }
+sub REQ_TIMER         () {  9 }
+sub REQ_PROG_POSTBACK () { 10 }
 
 sub RS_CONNECT      () { 0x01 }
 sub RS_SENDING      () { 0x02 }
@@ -166,8 +167,9 @@ sub poco_weeble_stop {
 #------------------------------------------------------------------------------
 
 sub poco_weeble_request {
-  my ( $kernel, $heap, $sender, $response_event, $http_request, $tag
-     ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1, ARG2];
+  my ( $kernel, $heap, $sender,
+       $response_event, $http_request, $tag, $progress_event
+     ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1, ARG2, ARG3];
 
   # Add a protocol if one isn't included.
   $http_request->protocol( $heap->{protocol} )
@@ -175,11 +177,16 @@ sub poco_weeble_request {
              and length $http_request->protocol()
            );
 
+  # Get the host and port from the request object.
+  my ($host, $port);
+  eval {
+    $host = $http_request->uri()->host();
+    $port = $http_request->uri()->port();
+  };
+  warn($@), return if $@;
+
   # Add a host header if one isn't included.
-  $http_request->header( Host =>
-                         $http_request->uri->host . ':' .
-                         $http_request->uri->port
-                       )
+  $http_request->header( Host => "$host:$port" )
     unless ( defined $http_request->header('Host')
              and length $http_request->header('Host')
            );
@@ -198,16 +205,17 @@ sub poco_weeble_request {
              );
   }
 
+  # Create a progress postback if requested.
+  my $progress_postback;
+  $progress_postback = $sender->postback($progress_event, $http_request)
+    if defined $progress_event;
+
   # If we have a cookie jar, have it frob our headers.  LWP rocks!
   if (defined $heap->{cookie_jar}) {
     $heap->{cookie_jar}->add_cookie_header($http_request);
   }
 
   DEBUG and warn "weeble got a request...\n";
-
-  # Get the host and port from the request object.
-  my $host = $http_request->uri()->host();
-  my $port = $http_request->uri()->port();
 
   # Get a unique request ID.
   my $request_id = ++$request_seq;
@@ -217,8 +225,8 @@ sub poco_weeble_request {
     POE::Wheel::SocketFactory->new
       ( RemoteAddress => $host,
         RemotePort    => $port,
-        SuccessState  => 'got_connect_done',
-        FailureState  => 'got_connect_error',
+        SuccessEvent  => 'got_connect_done',
+        FailureEvent  => 'got_connect_error',
       );
 
   # Create a timeout timer.
@@ -230,15 +238,16 @@ sub poco_weeble_request {
 
   $heap->{request}->{$request_id} =
     [ $sender->postback( $response_event, $http_request, $tag ), # REQ_POSTBACK
-      $socket_factory,   # REQ_WHEEL
-      $http_request,     # REQ_REQUEST
-      RS_CONNECT,        # REQ_STATE
-      undef,             # REQ_RESPONSE
-      '',                # REQ_BUFFER
-      '',                # REQ_LAST_HEADER
-      0,                 # REQ_OCTETS_GOT
-      "\x0D\x0A",        # REQ_NEWLINE
-      $timer_id,         # REQ_TIMER
+      $socket_factory,    # REQ_WHEEL
+      $http_request,      # REQ_REQUEST
+      RS_CONNECT,         # REQ_STATE
+      undef,              # REQ_RESPONSE
+      '',                 # REQ_BUFFER
+      '',                 # REQ_LAST_HEADER
+      0,                  # REQ_OCTETS_GOT
+      "\x0D\x0A",         # REQ_NEWLINE
+      $timer_id,          # REQ_TIMER
+      $progress_postback, # REQ_PROG_POSTBACK
     ];
 
   # Cross-reference the wheel and timer IDs back to the request.
@@ -269,9 +278,9 @@ sub poco_weeble_connect_ok {
     ( Handle       => $socket,
       Driver       => POE::Driver::SysRW->new(),
       Filter       => POE::Filter::Stream->new(),
-      InputState   => 'got_socket_input',
-      FlushedState => 'got_socket_flush',
-      ErrorState   => 'got_socket_error',
+      InputEvent   => 'got_socket_input',
+      FlushedEvent => 'got_socket_flush',
+      ErrorEvent   => 'got_socket_error',
     );
 
   # Add the new wheel ID to the lookup table.
@@ -327,11 +336,9 @@ sub poco_weeble_connect_error {
 
   my $request = delete $heap->{request}->{$request_id};
 
-  if (defined $request->[REQ_TIMER]) {
-    my $alarm_id =
-      delete $heap->{timer_to_request}->{ $request->[REQ_TIMER] };
+  my $alarm_id = $request->[REQ_TIMER];
+  if (delete $heap->{timer_to_request}->{ $alarm_id }) {
     $kernel->alarm_remove( $alarm_id );
-    undef $request->[REQ_TIMER];
   }
 
   # Post an error response back to the requesting session.
@@ -355,10 +362,7 @@ sub poco_weeble_timeout {
   }
 
   # No need to remove the alarm here because it's already gone.
-  if (defined $request->[REQ_TIMER]) {
-    delete $heap->{timer_to_request}->{ $request->[REQ_TIMER] };
-    undef $request->[REQ_TIMER];
-  }
+  delete $heap->{timer_to_request}->{ $request->[REQ_TIMER] };
 
   # Post an error response back to the requesting session.
   $request->[REQ_POSTBACK]->
@@ -394,11 +398,9 @@ sub poco_weeble_io_error {
   my $request = delete $heap->{request}->{$request_id};
 
   # Stop the timeout timer for this wheel, too.
-  my $timer_id = $request->[REQ_TIMER];
-  if (exists $heap->{timer_to_request}->{$timer_id}) {
-    $kernel->alarm_remove( $timer_id );
-    delete $heap->{timer_to_request}->{$timer_id};
-    undef $request->[REQ_TIMER];
+  my $alarm_id = $request->[REQ_TIMER];
+  if (delete $heap->{timer_to_request}->{$alarm_id}) {
+    $kernel->alarm_remove( $alarm_id );
   }
 
   # If there was a non-zero error, then something bad happened.  Post
@@ -470,16 +472,12 @@ sub poco_weeble_io_read {
       $request->[REQ_RESPONSE] = HTTP::Response->new( $2, $3 );
       $request->[REQ_RESPONSE]->protocol( $protocol );
       $request->[REQ_RESPONSE]->request( $request->[REQ_REQUEST] );
-
-      # Reset the octets count for testing the body size.
-      $request->[REQ_OCTETS_GOT] = length($request->[REQ_BUFFER]);
     }
 
     # No status line.  We go straight into content.  Since we don't
     # know the status, we don't purport to.
     else {
       DEBUG and warn "wheel $wheel_id got no status... moving to content.\n";
-
       $request->[REQ_RESPONSE] = HTTP::Response->new();
       $request->[REQ_STATE] = RS_IN_CONTENT;
     }
@@ -565,6 +563,15 @@ HEADER:
     # greater than our content length.
     if ( $request->[REQ_RESPONSE]->content_length() ) {
 
+      my $progress = int( ($request->[REQ_OCTETS_GOT] * 100) /
+                          $request->[REQ_RESPONSE]->content_length()
+                        );
+
+      $request->[REQ_PROG_POSTBACK]->
+        ( $request->[REQ_OCTETS_GOT],
+          $request->[REQ_RESPONSE]->content_length()
+        ) if  $request->[REQ_PROG_POSTBACK];
+
       if ( $request->[REQ_OCTETS_GOT] >=
            $request->[REQ_RESPONSE]->content_length()
          )
@@ -613,11 +620,9 @@ HEADER:
       my $request = delete $heap->{request}->{$request_id};
 
       # Stop the timeout timer for this wheel, too.
-      my $timer_id = $request->[REQ_TIMER];
-      if (defined $timer_id) {
-        $kernel->alarm_remove( $timer_id );
-        delete $heap->{timer_to_request}->{$timer_id};
-        undef $request->[REQ_TIMER];
+      my $alarm_id = $request->[REQ_TIMER];
+      if (delete $heap->{timer_to_request}->{$alarm_id}) {
+        $kernel->alarm_remove( $alarm_id );
       }
 
       $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE]);
@@ -736,11 +741,14 @@ an HTTP::Request object which defines the request.  For example:
                  'response',                # my state to receive responses
                  GET 'http://poe.perl.org', # a simple HTTP request
                  'unique id',               # a tag to identify the request
+                 'progress',                # an event to indicate progress
                );
 
 Requests include the state to which responses will be posted.  In the
 previous example, the handler for a 'response' state will be called
-with each HTTP response.
+with each HTTP response.  The "progress" handler is optional and if
+installed, the component will provide progress metrics (see sample
+handler below).
 
 HTTP responses come with two list references:
 
@@ -760,6 +768,24 @@ HTTP::Response object.
 
 Please see the HTTP::Request and HTTP::Response manpages for more
 information.
+
+The example progress handler shows how to calculate a percentage of
+download completion.
+
+  sub progress_handler {
+    my $gen_args  = $_[ARG0];    # args passed to all calls
+    my $call_args = $_[ARG1];    # args specific to the call
+
+    my $req = $gen_args->[0];    # HTTP::Request object being serviced
+    my $got = $call_args->[0];   # Bytes retrieved so far.
+    my $tot = $call_args->[1];   # Total bytes to be retrieved.
+
+    my $percent = $got / $tot * 100;
+
+    printf( "-- %.0f%% [%d/%d]: %s\n",
+            $percent, $got, $tot, $req->uri()
+          );
+  }
 
 =head1 SEE ALSO
 
