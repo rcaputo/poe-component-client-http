@@ -850,7 +850,7 @@ HEADER:
         my $line = $1;
 
         # New header.
-        if ($line =~ /^([\w\-]+)\s*\:\s*(.+)\s*$/) {
+        if ($line =~ /^([\w\-]+)\s*\:\s*(.+?)\s*$/) {
           DEBUG and warn "wheel $wheel_id got a new header: $1 ...\n";
 
           $request->[REQ_LAST_HEADER] = $1;
@@ -1046,7 +1046,7 @@ HEADER:
     }
   }
 
-  $request->[REQ_BUFFER] = '';
+  $request->[REQ_BUFFER] = '' unless $request->[REQ_STATE] & RS_IN_HEADERS;
 
   unless ($request->[REQ_STATE] & RS_DONE) {
     if (
