@@ -13,9 +13,9 @@ sub DEBUG          () { 0 }
 sub TEST_BIG_STUFF () { 0 }  # requires localhost:19
 
 $| = 1;
-print "1..2\n";
+print "1..3\n";
 
-my @test_results = ( 'not ok 1', 'not ok 2' );
+my @test_results = ( 'not ok 1', 'not ok 2', 'not ok 3' );
 
 #------------------------------------------------------------------------------
 
@@ -36,6 +36,10 @@ sub client_start {
                      cgi_field_ten => 'AAA',
                    ]
                  )
+               );
+
+  $kernel->post( weeble => request => got_response =>
+                 GET 'http://poe.perl.org/misc/test.cgi?cgi_field_fiv=555',
                );
 
   if (TEST_BIG_STUFF) {
@@ -63,16 +67,18 @@ sub client_got_response {
     my $response_string = $http_response->as_string();
     $response_string =~ s/^/| /mg;
 
-    print ",", '-' x 78, "\n";
-    print $response_string;
-    print "`", '-' x 78, "\n";
+    warn ",", '-' x 78, "\n";
+    warn $response_string;
+    warn "`", '-' x 78, "\n";
   };
 
   my $request_path = $http_request->uri->path . ''; # stringify
 
   if ($http_response->code == 200) {
+    my $response_string = $http_response->as_string();
     $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
-    $test_results[1] = 'ok 2' if $request_path =~ m/\/test\.cgi$/;
+    $test_results[1] = 'ok 2' if $response_string =~ /cgi_field_six/;
+    $test_results[2] = 'ok 3' if $response_string =~ /cgi_field_fiv/;
   }
 }
 
