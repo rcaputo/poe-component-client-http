@@ -14,9 +14,10 @@ ExtUtils::AutoInstall->import
   ( -version => '0.54',
     -core    =>
     [ 'POE'            => 0.27,
-      'HTTP::Request'  => 1.27,
-      'HTTP::Response' => 1.33,
-      'URI'            => 1.11,
+      'HTTP::Request'  => 1.30,
+      'HTTP::Response' => 1.37,
+      'URI'            => 1.24,
+      'HTML::Parser'   => 3.33,  # For HTML::HeadParser
     ],
     "Optional modules for SSL support." =>
     [ -default              => 0,
