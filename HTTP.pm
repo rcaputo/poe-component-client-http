@@ -393,10 +393,10 @@ sub poco_weeble_connect_ok {
 
   my $request_uri;
   if ($request->[REQ_USING_PROXY]) {
-    $request_uri = $http_request->uri();
+    $request_uri = $http_request->uri()->canonical();
   }
   else {
-    $request_uri = $http_request->uri()->path_query();
+    $request_uri = $http_request->uri()->canonical()->path_query();
   }
 
   my $request_string =
