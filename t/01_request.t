@@ -14,6 +14,8 @@ sub DEBUG () { 0 };
 $| = 1;
 print "1..2\n";
 
+my @test_results = ( 'not ok 1', 'not ok 2' );
+
 #------------------------------------------------------------------------------
 
 sub client_start {
@@ -38,6 +40,9 @@ sub client_start {
 
 sub client_stop {
   DEBUG and warn "client stopped...\n";
+  foreach (@test_results) {
+    print "$_\n";
+  }
 }
 
 sub client_got_response {
@@ -58,9 +63,10 @@ sub client_got_response {
 
   my $request_path = $http_request->uri->path . ''; # stringify
 
-  print 'not '   unless $http_response->code == 200;
-  print "ok 1\n" if $request_path =~ m/\/test.html$/;
-  print "ok 2\n" if $request_path =~ m/\/test.cgi$/;
+  if ($http_response->code == 200) {
+    $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
+    $test_results[1] = 'ok 2' if $request_path =~ m/\/test\.cgi$/;
+  }
 }
 
 #------------------------------------------------------------------------------
