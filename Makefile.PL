@@ -11,9 +11,9 @@ open(CHANGES, ">>CHANGES") and close CHANGES;
 
 # Prompt for optional things.
 ExtUtils::AutoInstall->import
-  ( -version => '0.32',
+  ( -version => '0.50',
     -core    =>
-    [ 'POE'            => 0.22,
+    [ 'POE'            => 0.2501,
       'HTTP::Request'  => 1.27,
       'HTTP::Response' => 1.33,
       'URI'            => 1.11,
@@ -24,9 +24,6 @@ ExtUtils::AutoInstall->import
       'Net::SSLeay::Handle' => 0.61,
     ],
   );
-
-# To mollify a recent warning in POE::Kernel.
-$POE::Kernel::poe_kernel->run();
 
 # Write that makefile.
 WriteMakefile
