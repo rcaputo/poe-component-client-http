@@ -11,7 +11,7 @@ open(CHANGES, ">>CHANGES") and close CHANGES;
 
 # Prompt for optional things.
 ExtUtils::AutoInstall->import
-  ( -version => '0.50',
+  ( -version => '0.54',
     -core    =>
     [ 'POE'            => 0.27,
       'HTTP::Request'  => 1.27,
