@@ -9,7 +9,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.47';
+$VERSION = '0.4701';
 
 use Carp qw(croak);
 use POSIX;
@@ -56,6 +56,8 @@ sub PROXY_PORT () { 1 }
 
 sub TRUE  () { 1 }
 sub FALSE () { 0 }
+
+sub DEFAULT_BLOCK_SIZE () { 4096 }
 
 # Unique request ID, independent of wheel and timer IDs.
 
@@ -109,6 +111,8 @@ sub spawn {
            ) unless defined $agent and length $agent;
 
   my $max_size = delete $params{MaxSize};
+
+  my $streams = delete $params{Streaming};
 
   my $protocol = delete $params{Protocol};
   $protocol = 'HTTP/1.0' unless defined $protocol and length $protocol;
@@ -174,16 +178,18 @@ sub spawn {
         # Sorry, don't handle signals.
         _signal           => sub { 0 },
       },
-      args => [ $alias,      # ARG0
-                $timeout,    # ARG1
-                $agent,      # ARG2
-                $cookie_jar, # ARG3
-                $from,       # ARG4
-                $proxy,      # ARG5
-                $no_proxy,   # ARG6
-                $protocol,   # ARG7
-                $max_size,   # ARG8
-              ],
+      heap =>
+      { alias       => $alias,
+        timeout     => $timeout,
+        cookie_jar  => $cookie_jar,
+        proxy       => $proxy,
+        no_proxy    => $no_proxy,
+        agent       => $agent,
+        from        => $from,
+        protocol    => $protocol,
+        max_size    => $max_size,
+        streams     => $streams,
+      },
     );
 
   undef;
@@ -192,40 +198,27 @@ sub spawn {
 #------------------------------------------------------------------------------
 
 sub poco_weeble_start {
-  my ( $kernel, $heap,
-       $alias, $timeout, $agent, $cookie_jar, $from,
-       $proxy, $no_proxy, $protocol, $max_size
-     ) = @_[KERNEL, HEAP, ARG0..$#_];
+  my ($kernel, $heap) = @_[KERNEL, HEAP];
 
   DEBUG and do {
     sub no_undef { (defined $_[0]) ? $_[0] : "(undef)" };
     sub no_undef_list { (defined $_[0]) ? "@{$_[0]}" : "(undef)" };
-    warn ",--- starting a http client component ----\n";
-    warn "| alias     : $alias\n";
-    warn "| timeout   : $timeout\n";
-    warn "| agent     : $agent\n";
-    warn "| protocol  : $protocol\n";
-    warn "| max_size  : ", no_undef($max_size), "\n";
-    warn "| cookie_jar: ", no_undef($cookie_jar), "\n";
-    warn "| from      : ", no_undef($from), "\n";
-    warn "| proxy     : ", no_undef_list($proxy), "\n";
-    warn "| no_proxy  : ", no_undef_list($no_proxy), "\n";
-    warn "'-----------------------------------------\n";
+    warn( ",--- starting a http client component ----\n",
+          "| alias     : $heap->{alias}\n",
+          "| timeout   : $heap->{timeout}\n",
+          "| agent     : $heap->{agent}\n",
+          "| protocol  : $heap->{protocol}\n",
+          "| max_size  : ", no_undef($heap->{max_size}), "\n",
+          "| streams   : ", no_undef($heap->{streams}), "\n",
+          "| cookie_jar: ", no_undef($heap->{cookie_jar}), "\n",
+          "| from      : ", no_undef($heap->{from}), "\n",
+          "| proxy     : ", no_undef_list($heap->{proxy}), "\n",
+          "| no_proxy  : ", no_undef_list($heap->{no_proxy}), "\n",
+          "'-----------------------------------------\n",
+        );
   };
 
-  $heap->{alias}      = $alias;
-  $heap->{timeout}    = $timeout;
-  $heap->{cookie_jar} = $cookie_jar;
-  $heap->{proxy}      = $proxy;
-  $heap->{no_proxy}   = $no_proxy;
-
-  $heap->{agent}      = $agent;
-  $heap->{from}       = $from;
-  $heap->{protocol}   = $protocol;
-
-  $heap->{max_size}   = $max_size;
-
-  $kernel->alias_set($alias);
+  $kernel->alias_set($heap->{alias});
 }
 
 #------------------------------------------------------------------------------
@@ -472,10 +465,13 @@ sub poco_weeble_connect_ok {
     DEBUG and warn "wheel $wheel_id switched to SSL...\n";
   }
 
+  my $block_size = $heap->{streaming} || DEFAULT_BLOCK_SIZE;
+  $block_size = DEFAULT_BLOCK_SIZE if $block_size < 1;
+
   # Make a ReadWrite wheel to interact on the socket.
   my $new_wheel = POE::Wheel::ReadWrite->new
     ( Handle       => $socket,
-      Driver       => POE::Driver::SysRW->new(BlockSize => 1024),
+      Driver       => POE::Driver::SysRW->new(BlockSize => $block_size),
       Filter       => POE::Filter::Stream->new(),
       InputEvent   => 'got_socket_input',
       FlushedEvent => 'got_socket_flush',
@@ -632,7 +628,17 @@ sub poco_weeble_io_error {
       $heap->{cookie_jar}->extract_cookies($request->[REQ_RESPONSE]);
     }
 
-    $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE]);
+    # If we're streaming, the response is HTTP::Headers and undef to
+    # signal the end of the stream.  Otherwise it's the entire
+    # HTTP::Response object we've carefully built.
+    if ($heap->{streaming}) {
+      $request->[REQ_POSTBACK]->( $request->[REQ_RESPONSE]->headers(),
+                                  undef
+                                );
+    }
+    else {
+      $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE]);
+    }
     return;
   }
 
@@ -655,6 +661,13 @@ sub poco_weeble_io_read {
 
   DEBUG and warn "wheel $wheel_id got input...\n";
   DEBUG_DATA and warn(_hexdump($input), "\n");
+
+  # Reset the timeout if we get data.  -><- I think it is possible for
+  # this to gradually lose time, eventually timing out anyway over the
+  # course of a long download.  It may be more proper to have a
+  # delay_adjust() in POE::Kernel that resets an alarm to an offset
+  # from the current time.
+  $kernel->alarm_adjust( $request->[REQ_TIMER], $heap->{timeout} );
 
   # Aggregate the new input.
   $request->[REQ_BUFFER] .= $input;
@@ -763,13 +776,34 @@ HEADER:
   # may go from header to content in the same read.
   if ($request->[REQ_STATE] & RS_IN_CONTENT) {
 
-    # Count how many octets we've received.
+    # Count how many octets we've received.  -><- This may fail on
+    # perl 5.8 if the input has been identified as Unicode.  Then
+    # again, the C<use bytes> in Driver::SysRW may have untainted the
+    # data... or it may have just changed the semantics of length()
+    # therein.  If it's done the former, then we're safe.  Otherwise
+    # we also need to C<use bytes>.
     my $this_chunk_length = length($request->[REQ_BUFFER]);
     $request->[REQ_OCTETS_GOT] += $this_chunk_length;
 
-    # Add the new octets to the response's content.  -><- This should
-    # only add up to content-length.
-    $request->[REQ_RESPONSE]->add_content( $request->[REQ_BUFFER] );
+    # We've gone over the maximum content size to return.  Chop it
+    # back.
+    if ($heap->{max_size} and $request->[REQ_OCTETS_GOT] > $heap->{max_size}) {
+      my $over = $request->[REQ_OCTETS_GOT] - $heap->{max_size};
+      $request->[REQ_OCTETS_GOT] -= $over;
+      substr($request->[REQ_BUFFER], -$over) = "";
+    }
+
+    # If we are streaming, send the chunk back to the client session.
+    # Otherwise add the new octets to the response's content.  -><-
+    # This should only add up to content-length octets total!
+    if ($heap->{streams}) {
+      $request->[REQ_POSTBACK]->( $request->[REQ_RESPONSE]->headers(),
+                                  $request->[REQ_BUFFER]
+                                );
+    }
+    else {
+      $request->[REQ_RESPONSE]->add_content($request->[REQ_BUFFER]);
+    }
     $request->[REQ_BUFFER] = '';
 
     DEBUG and do {
@@ -794,7 +828,7 @@ HEADER:
       $request->[REQ_PROG_POSTBACK]->
         ( $request->[REQ_OCTETS_GOT],
           $request->[REQ_RESPONSE]->content_length()
-        ) if  $request->[REQ_PROG_POSTBACK];
+        ) if $request->[REQ_PROG_POSTBACK];
 
       if ( $request->[REQ_OCTETS_GOT] >=
            $request->[REQ_RESPONSE]->content_length()
@@ -926,14 +960,15 @@ POE::Component::Client::HTTP - a HTTP user-agent component
   use POE qw(Component::Client::HTTP);
 
   POE::Component::Client::HTTP->spawn(
-    Agent    => 'SpiffCrawler/0.90',    # defaults to something long
-    Alias    => 'ua',                   # defaults to 'weeble'
-    From     => 'spiffster@perl.org',   # defaults to undef (no header)
-    Protocol => 'HTTP/0.9',             # defaults to 'HTTP/1.0'
-    Timeout  => 60,                     # defaults to 180 seconds
-    Proxy    => "http://localhost:80",  # defaults to HTTP_PROXY env. variable
-    NoProxy  => [ "localhost", "127.0.0.1" ],
-                                        # defaults to NO_PROXY env. variable
+    Agent     => 'SpiffCrawler/0.90',   # defaults to something long
+    Alias     => 'ua',                  # defaults to 'weeble'
+    From      => 'spiffster@perl.org',  # defaults to undef (no header)
+    Protocol  => 'HTTP/0.9',            # defaults to 'HTTP/1.0'
+    Timeout   => 60,                    # defaults to 180 seconds
+    MaxSize   => 16384,                 # defaults to entire response
+    Streaming => 4096,                  # defaults to 0 (off)
+    Proxy     => "http://localhost:80",  # defaults to HTTP_PROXY env. variable
+    NoProxy   => [ "localhost", "127.0.0.1" ], # defs to NO_PROXY env. variable
   );
 
   $kernel->post( 'ua',        # posts to the 'ua' alias
@@ -946,19 +981,34 @@ POE::Component::Client::HTTP - a HTTP user-agent component
   # 'response' event.
   sub response_handler {
     my ($request_packet, $response_packet) = @_[ARG0, ARG1];
-    my $request_object  = $request_packet->[0];  # HTTP::Request
-    my $response_object = $response_packet->[0]; # HTTP::Response
 
-    print "*" x 78, "\n";
-    print "*** my request:\n";
-    print "-' x 78, "\n";
-    print $request_object->as_string();
-    print "*" x 78, "\n";
+    # HTTP::Request
+    my $request_object  = $request_packet->[0];
 
-    print "*" x 78, "\n";
-    print "*** their response:\n";
-    print "-' x 78, "\n";
-    print $response_object->as_string();
+    # HTTP::Response or HTTP::Headers (if streaming)
+    my $response_object = $response_packet->[0];
+
+    my $stream_chunk;
+    if ($response_object->isa("HTTP::Headers")) {
+      $stream_chunk = $response_packet->[1];
+    }
+
+    print( "*" x 78, "\n",
+           "*** my request:\n",
+           "-" x 78, "\n",
+           $request_object->as_string(),
+           "*" x 78, "\n",
+           "*** their response:\n",
+           "-" x 78, "\n",
+           $response_object->as_string(),
+         );
+
+    if (defined $stream_chunk) {
+      print( "-" x 40, "\n",
+             $stream_chunk, "\n"
+           );
+    }
+
     print "*" x 78, "\n";
   }
 
@@ -1008,6 +1058,13 @@ C<From> holds an e-mail address where the client's administrator
 and/or maintainer may be reached.  It defaults to undef, which means
 no From header will be included in requests.
 
+=item MaxSize => OCTETS
+
+C<MaxSize> specifies the largest response to accept from a server.
+The content of larger responses will be truncated to OCTET octets.
+This has been used to return the <head></head> section of web pages
+without the need to wade through <body></body>.
+
 =item NoProxy => [ $host_1, $host_2, ..., $host_N ]
 
 =item NoProxy => "host1,host2,hostN"
@@ -1040,6 +1097,29 @@ Proxy URLs must specify the proxy port, even if it is 80.
 
   Proxy => [ "127.0.0.1", 80 ],
   Proxy => "http://127.0.0.1:80/",
+
+=item Streaming => OCTETS
+
+C<Streaming> changes allows Client::HTTP to return large content in
+chunks (of OCTETS octets each) rather than combine the entire content
+into a single HTTP::Response object.
+
+By default, Client::HTTP reads the entire content for a response into
+memory before returning an HTTP::Response object.  This is obviously
+bad for applications like streaming MP3 clients, because they often
+fetch songs that never end.  Yes, they go on and on, my friend.
+
+When C<Streaming> is set to nonzero, however, the response handler
+receives chunks of up to OCTETS octets apiece.  The response handler
+accepts slightly different parameters in this case.  ARG0 is an
+HTTP::Headers object, and ARG1 contains a a chunk of raw response
+content, or undef if the stream has ended.
+
+  sub streaming_response_handler {
+    my $response_packet = $_[ARG1];
+    my ($headers, $data) = @$response_packet;
+    print SAVED_STREAM $data if defined $data;
+  }
 
 =item Timeout => $query_timeout
 
