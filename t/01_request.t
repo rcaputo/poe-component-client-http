@@ -24,9 +24,6 @@ my @test_results = (
 
 BEGIN {
   my $has_ssl = 0;
-  $has_ssl = 1;
-  return;
-  die;
   eval { require Net::SSLeay::Handle;
          $has_ssl = 1;
        };
