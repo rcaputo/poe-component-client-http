@@ -81,9 +81,10 @@ sub spawn {
   $timeout = 180 unless defined $timeout and $timeout >= 0;
 
   my $agent = delete $params{Agent};
-  $agent = sprintf( 'POE-Component-Client-HTTP/%.03f (perl; N; POE; en)',
-                    $VERSION,
-                  ) unless defined $agent and length $agent;
+  $agent =
+    sprintf( 'POE-Component-Client-HTTP/%.03f (perl; N; POE; en; rv:%.03f)',
+             $VERSION, $VERSION
+           ) unless defined $agent and length $agent;
 
   my $max_size = delete $params{MaxSize};
 
