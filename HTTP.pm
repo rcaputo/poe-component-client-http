@@ -9,7 +9,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.49';
+$VERSION = '0.50';
 
 use Carp qw(croak);
 use POSIX;
@@ -245,11 +245,12 @@ sub poco_weeble_request {
   # request URI.
 
   # Get the host and port from the request object.
-  my ($host, $port, $using_proxy);
+  my ($host, $port, $scheme, $using_proxy);
 
   eval {
-    $host = $http_request->uri()->host();
-    $port = $http_request->uri()->port();
+    $host   = $http_request->uri()->host();
+    $port   = $http_request->uri()->port();
+    $scheme = $http_request->uri()->scheme();
   };
   warn($@), return if $@;
 
@@ -263,10 +264,17 @@ sub poco_weeble_request {
   }
 
   # Add a host header if one isn't included.
-  $http_request->header( Host => "$host:$port" )
-    unless ( defined $http_request->header('Host')
-             and length $http_request->header('Host')
-           );
+  unless ( defined $http_request->header('Host')
+           and length $http_request->header('Host')
+         ) {
+    # Add port only if non-standard.
+    if ($port == 80) {
+      $http_request->header( Host => $host );
+    }
+    else {
+      $http_request->header( Host => "$host:$port" )
+    }
+  }
 
   # Add an agent header if one isn't included.
   $http_request->user_agent( $heap->{agent} )
