@@ -15,14 +15,18 @@ sub MAX_BIG_REQUEST_SIZE  () { 4096 }
 sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
 
 $| = 1;
-print "1..9\n";
+print "1..10\n";
 
-my @test_results = ( 'not ok 1', 'not ok 2', 'not ok 3', 'not ok 4',
-                     'ok 5', 'not ok 6', 'not ok 7', 'not ok 8', 'not ok 9',
-                   );
+my @test_results = (
+  'not ok 1', 'not ok 2', 'not ok 3', 'not ok 4', 'ok 5', 'not ok 6',
+  'not ok 7', 'not ok 8', 'not ok 9', 'not ok 10',
+);
 
 BEGIN {
   my $has_ssl = 0;
+  $has_ssl = 1;
+  return;
+  die;
   eval { require Net::SSLeay::Handle;
          $has_ssl = 1;
        };
@@ -78,6 +82,10 @@ sub client_start {
 
   $kernel->post( streamer => request => got_stream_response =>
                  GET 'http://poe.perl.org/misc/stream-test.cgi'
+               );
+
+  $kernel->post( redirector => request => got_redir_response =>
+                 GET 'http://poe.perl.org/misc/redir-test.cgi'
                );
 
   $kernel->yield('check_counts', 9, (HAS_SSL ? 7 : 6));
@@ -163,6 +171,33 @@ sub client_got_big_response {
   }
 }
 
+sub client_got_redir_response {
+  my ($heap, $request_packet, $response_packet) = @_[HEAP, ARG0, ARG1];
+  my $http_request  = $request_packet->[0];
+  my $http_response = $response_packet->[0];
+
+  DEBUG and do {
+    warn "client got redirected response...\n";
+
+    my $response_string = $http_response->as_string();
+    $response_string =~ s/^/| /mg;
+
+    warn ",", '-' x 78, "\n";
+    warn $response_string;
+    warn "`", '-' x 78, "\n";
+  };
+
+  if ( (defined $http_response->code) and
+       ($http_response->code == 200) and
+       ($http_response->base eq "http://poe.perl.org/misc/test.cgi") and
+       ($http_response->previous->base eq
+        "http://poe.perl.org/misc/redir-test.cgi"
+       )
+     ) {
+    $test_results[9] = 'ok 10';
+  }
+}
+
 my $total_octets_got = 0;
 my $chunk_buffer = "";
 my $next_chunk_character = "A";
@@ -213,16 +248,22 @@ sub client_got_stream_response {
 #------------------------------------------------------------------------------
 
 # Create a weeble component.
-POE::Component::Client::HTTP->spawn
-  ( MaxSize => MAX_BIG_REQUEST_SIZE,
-    Timeout => 180,
-  );
+POE::Component::Client::HTTP->spawn(
+  MaxSize => MAX_BIG_REQUEST_SIZE,
+  Timeout => 180,
+);
 
 # Create one for streaming.
-POE::Component::Client::HTTP->spawn
-  ( Streaming => MAX_STREAM_CHUNK_SIZE,
-    Alias     => "streamer",
-  );
+POE::Component::Client::HTTP->spawn(
+  Streaming => MAX_STREAM_CHUNK_SIZE,
+  Alias     => "streamer",
+);
+
+# Create one for redirection.
+POE::Component::Client::HTTP->spawn(
+  FollowRedirects => 5,
+  Alias           => "redirector",
+);
 
 # Create a session that will make some requests.
 POE::Session->create
@@ -232,6 +273,7 @@ POE::Session->create
       got_response        => \&client_got_response,
       got_big_response    => \&client_got_big_response,
       got_stream_response => \&client_got_stream_response,
+      got_redir_response  => \&client_got_redir_response,
       check_counts        => \&client_check_counts,
     }
   );

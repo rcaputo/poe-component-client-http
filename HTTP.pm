@@ -9,12 +9,13 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.55';
+$VERSION = '0.56';
 
 use Carp qw(croak);
 use POSIX;
 use Symbol qw(gensym);
 use HTTP::Response;
+use URI;
 
 use POE qw( Wheel::SocketFactory Wheel::ReadWrite
             Driver::SysRW Filter::Stream
@@ -49,6 +50,7 @@ sub RS_CONNECT      () { 0x01 }
 sub RS_SENDING      () { 0x02 }
 sub RS_IN_STATUS    () { 0x04 }
 sub RS_IN_HEADERS   () { 0x08 }
+sub RS_CHK_REDIRECT () { 0x09 }
 sub RS_IN_CONTENT   () { 0x10 }
 sub RS_DONE         () { 0x20 }
 
@@ -69,7 +71,6 @@ my $request_seq = 0;
 BEGIN {
   my $has_ssl = 0;
   eval { require POE::Component::Client::HTTP::SSL };
-
   if (defined $Net::SSLeay::VERSION and
       defined $Net::SSLeay::Handle::VERSION and
       $Net::SSLeay::VERSION >= 1.17 and
@@ -77,7 +78,6 @@ BEGIN {
      ) {
     $has_ssl = 1;
   }
-
   eval "sub HAS_SSL () { $has_ssl }";
 }
 
@@ -119,7 +119,7 @@ sub spawn {
   }
 
   push( @$agent,
-        sprintf('POE-Component-Client-HTTP/%.03f (perl; N; POE; en; rv:%.03f)',
+        sprintf('POE-Component-Client-HTTP/%s (perl; N; POE; en; rv:%f)',
                 $VERSION, $VERSION
                )
       ) unless @$agent;
@@ -135,6 +135,7 @@ sub spawn {
   my $from       = delete $params{From};
   my $no_proxy   = delete $params{NoProxy};
   my $proxy      = delete $params{Proxy};
+  my $frmax      = delete $params{FollowRedirects};
 
   # Process HTTP_PROXY and NO_PROXY environment variables.
 
@@ -201,6 +202,7 @@ sub spawn {
         cookie_jar  => $cookie_jar,
         proxy       => $proxy,
         no_proxy    => $no_proxy,
+        frmax       => $frmax,
         agent       => $agent,
         from        => $from,
         protocol    => $protocol,
@@ -354,6 +356,17 @@ sub poco_weeble_request {
       $port,              # REQ_PORT
       time(),             # REQ_START_TIME
     ];
+
+  if($heap->{frmax}) {
+    my $uri = $http_request->uri()->as_string();
+    if (defined $tag && $tag =~ s/_redir_//) {
+      $request->[REQ_POSTBACK] = $heap->{request}->{$tag}->[REQ_POSTBACK];
+      $heap->{redir}->{$request_id}->{from} = $tag;
+      @{$heap->{redir}->{$request_id}->{hist}} = 
+        @{$heap->{redir}->{$tag}->{hist}};
+    }
+    push @{$heap->{redir}->{$request_id}->{hist}}, $uri;
+  }
 
   # Bail out if no SSL and we need it.
   if ($http_request->uri->scheme() eq 'https') {
@@ -683,7 +696,7 @@ sub poco_weeble_io_error {
                                 );
     }
     else {
-      $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE]);
+      _respond($heap, $request_id, $request);
     }
     return;
   }
@@ -807,13 +820,45 @@ HEADER:
         }
       }
 
-      # This line is empty; we eat it and switch to RS_GET_CONTENT.
+      # This line is empty; we eat it and switch to RS_CHK_REDIRECT.
       else {
         DEBUG and
-          warn "wheel $wheel_id got a blank line... moving to content.\n";
-
-        $request->[REQ_STATE] = RS_IN_CONTENT;
+          warn "wheel $wheel_id got a blank line... ".
+               "headers done, check for redirection.\n";
+        $request->[REQ_STATE] = RS_CHK_REDIRECT;
         last HEADER;
+      }
+    }
+  }
+
+  # Check for redirection, if enabled. Yield request to ourselves.
+  # Prevent looping, either through maximum hops, or repeat.
+  if ($request->[REQ_STATE] & RS_CHK_REDIRECT) {
+    $request->[REQ_STATE] = RS_IN_CONTENT; #We go here once per request.
+
+    if ($request->[REQ_RESPONSE]->is_redirect() && $heap->{frmax}) {
+      my $uri = $request->[REQ_RESPONSE]->header('Location');
+      # Canonicalize relative URIs.
+      my $base = $request->[REQ_RESPONSE]->base();
+      $uri = URI->new($uri, $base)->abs($base);
+
+      DEBUG and warn "Redirected to ".$uri."\n";
+
+      my @history = @{$heap->{redir}->{$request_id}->{hist}};
+      if(@history > 5 || grep($uri eq $_, @history)) {
+        $request->[REQ_STATE] = RS_DONE;
+        DEBUG and warn "Too much redirection, moving to done\n";
+      }
+      else { # All fine, yield new request and mark this disabled.
+        my $newrequest = $request->[REQ_REQUEST]->clone();
+	$newrequest->uri($uri);
+        $kernel->yield(
+          request => 'dummystate',
+          $newrequest, "_redir_".$request_id,
+          $request->[REQ_PROG_POSTBACK]
+        );
+	$heap->{redir}->{$request_id}->{request} = $request->[REQ_REQUEST];
+        $heap->{redir}->{$request_id}->{followed} = 1; # Mark redirected.
       }
     }
   }
@@ -928,7 +973,7 @@ HEADER:
         $kernel->alarm_remove( $alarm_id );
       }
 
-      $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE]);
+      _respond($heap, $request_id, $request);
     }
   }
 }
@@ -992,6 +1037,31 @@ sub _post_error {
   $request->[REQ_POSTBACK]->($response);
 }
 
+#------------------------------------------------------------------------------
+# Generate a response, and if necessary postback. This is not a POE function.
+
+sub _respond {
+  my($heap, $request_id, $request) = @_;
+  my $response = $request->[REQ_RESPONSE];
+  if ($heap->{frmax}) {
+    # If this page sent redirect, store response and return.
+    if ($heap->{redir}->{$request_id}->{followed}) {
+      $heap->{redir}->{$request_id}->{response} = $response;
+      return;
+    }
+    else { # No redirect, or real destination => assemble chain and return
+      my $tmpresponse = $response;
+      while (defined $heap->{redir}->{$request_id}->{from}) {
+        my $prev = $heap->{redir}->{$request_id}->{from};
+        $tmpresponse->previous(delete$heap->{redir}->{$prev}->{response});
+        $tmpresponse = $tmpresponse->previous();
+	$request_id = $prev;
+      }
+    }
+  }
+  $request->[REQ_POSTBACK]->($response);
+}
+
 1;
 
 __END__
@@ -1012,7 +1082,8 @@ POE::Component::Client::HTTP - a HTTP user-agent component
     Timeout   => 60,                    # defaults to 180 seconds
     MaxSize   => 16384,                 # defaults to entire response
     Streaming => 4096,                  # defaults to 0 (off)
-    Proxy     => "http://localhost:80",  # defaults to HTTP_PROXY env. variable
+		 FollowRedirects => 2   # defaults to 0 (off)
+    Proxy     => "http://localhost:80", # defaults to HTTP_PROXY env. variable
     NoProxy   => [ "localhost", "127.0.0.1" ], # defs to NO_PROXY env. variable
   );
 
@@ -1180,6 +1251,17 @@ content, or undef if the stream has ended.
     my ($response, $data) = @$response_packet;
     print SAVED_STREAM $data if defined $data;
   }
+
+=item FollowRedirects => $number_of_hops_to_follow
+
+C<FollowRedirects> specifies how many redirects (e.g. 302 Moved) to
+follow.  If not specified defaults to 0, and thus no redirection is
+followed.  This maintains compatibility with the previous behavior,
+which was not to follow redirects at all.
+
+If redirects are followed, a response chain should be built, and can
+be accessed through $response_object->previous(). See HTTP::Response
+for details here.
 
 =item Timeout => $query_timeout
 
