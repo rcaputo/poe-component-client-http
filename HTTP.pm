@@ -9,7 +9,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.51';
+$VERSION = '0.5101';
 
 use Carp qw(croak);
 use POSIX;
@@ -43,6 +43,7 @@ sub REQ_PROG_POSTBACK () { 10 }
 sub REQ_USING_PROXY   () { 11 }
 sub REQ_HOST          () { 12 }
 sub REQ_PORT          () { 13 }
+sub REQ_START_TIME    () { 14 }
 
 sub RS_CONNECT      () { 0x01 }
 sub RS_SENDING      () { 0x02 }
@@ -80,11 +81,6 @@ BEGIN {
   eval "sub HAS_SSL () { $has_ssl }";
 }
 
-# Start a DNS client if we can.
-if (HAS_CLIENT_DNS) {
-  POE::Component::Client::DNS->spawn( Alias => "poco_weeble_resolver" );
-}
-
 #------------------------------------------------------------------------------
 # Spawn a new PoCo::Client::HTTP session.  This basically is a
 # constructor, but it isn't named "new" because it doesn't create a
@@ -104,11 +100,29 @@ sub spawn {
   my $timeout = delete $params{Timeout};
   $timeout = 180 unless defined $timeout and $timeout >= 0;
 
+  # Start a DNS resolver for this agent, if we can.
+  if (HAS_CLIENT_DNS) {
+    POE::Component::Client::DNS->spawn
+      ( Alias   => "poco_${alias}_resolver",
+        Timeout => $timeout,
+      );
+  }
+
+  # Accept an agent, or a reference to a list of agents.
   my $agent = delete $params{Agent};
-  $agent =
-    sprintf( 'POE-Component-Client-HTTP/%.03f (perl; N; POE; en; rv:%.03f)',
-             $VERSION, $VERSION
-           ) unless defined $agent and length $agent;
+  $agent = [] unless defined $agent;
+  if (ref($agent) eq "") {
+    $agent = [ $agent ];
+  }
+  unless (ref($agent) eq "ARRAY") {
+    croak "Agent must be a scalar or a reference to a list of agent strings";
+  }
+
+  push( @$agent,
+        sprintf('POE-Component-Client-HTTP/%.03f (perl; N; POE; en; rv:%.03f)',
+                $VERSION, $VERSION
+               )
+      ) unless @$agent;
 
   my $max_size = delete $params{MaxSize};
 
@@ -119,8 +133,8 @@ sub spawn {
 
   my $cookie_jar = delete $params{CookieJar};
   my $from       = delete $params{From};
-  my $proxy      = delete $params{Proxy};
   my $no_proxy   = delete $params{NoProxy};
+  my $proxy      = delete $params{Proxy};
 
   # Process HTTP_PROXY and NO_PROXY environment variables.
 
@@ -132,18 +146,23 @@ sub spawn {
   if (defined $proxy) {
     if (ref($proxy) eq 'ARRAY') {
       croak "Proxy must contain [HOST,PORT]" unless @$proxy == 2;
+      $proxy = [ $proxy ];
     }
     else {
-      $proxy =~ s/^http:\/+//;
-      $proxy =~ s/\/+$//;
-      croak "Proxy must contain host:port" unless $proxy =~ /^(.+):(\d+)$/;
-      $proxy = [ $1, $2 ];
+      my @proxies = split /\s*\,\s*/, $proxy;
+      foreach (@proxies) {
+        s/^http:\/+//;
+        s/\/+$//;
+        croak "Proxy must contain host:port" unless /^(.+):(\d+)$/;
+        $_ = [ $1, $2 ];
+      }
+      $proxy = \@proxies;
     }
   }
 
   if (defined $no_proxy) {
     unless (ref($no_proxy) eq 'ARRAY') {
-      $no_proxy = [ split(/\,/, $no_proxy) ];
+      $no_proxy = [ split(/\s*\,\s*/, $no_proxy) ];
     }
   }
 
@@ -203,7 +222,7 @@ sub poco_weeble_start {
     warn( ",--- starting a http client component ----\n",
           "| alias     : $heap->{alias}\n",
           "| timeout   : $heap->{timeout}\n",
-          "| agent     : $heap->{agent}\n",
+          "| agent     : ", no_undef_list($heap->{agent}), "\n",
           "| protocol  : $heap->{protocol}\n",
           "| max_size  : ", no_undef($heap->{max_size}), "\n",
           "| streams   : ", no_undef($heap->{streams}), "\n",
@@ -255,8 +274,9 @@ sub poco_weeble_request {
   warn($@), return if $@;
 
   if (defined $heap->{proxy} and not _in_no_proxy($host, $heap->{no_proxy})) {
-    $host = $heap->{proxy}->[PROXY_HOST];
-    $port = $heap->{proxy}->[PROXY_PORT];
+    my $proxy = $heap->{proxy}->[rand @{$heap->{proxy}}];
+    $host = $proxy->[PROXY_HOST];
+    $port = $proxy->[PROXY_PORT];
     $using_proxy = TRUE;
   }
   else {
@@ -277,10 +297,10 @@ sub poco_weeble_request {
   }
 
   # Add an agent header if one isn't included.
-  $http_request->user_agent( $heap->{agent} )
-    unless ( defined $http_request->user_agent
-             and length $http_request->user_agent
-           );
+  if (@{$heap->{agent}}) {
+    my $this_agent = $heap->{agent}->[rand @{$heap->{agent}}];
+    $http_request->user_agent($this_agent);
+  }
 
   # Add a from header if one isn't included.
   if (defined $heap->{from} and length $heap->{from}) {
@@ -321,6 +341,7 @@ sub poco_weeble_request {
       $using_proxy,       # REQ_USING_PROXY
       $host,              # REQ_HOST
       $port,              # REQ_PORT
+      time(),             # REQ_START_TIME
     ];
 
   # Bail out if no SSL and we need it.
@@ -344,7 +365,8 @@ sub poco_weeble_request {
     else {
       DEBUG and warn "DNS: $host is being looked up in the background.\n";
       $heap->{resolve}->{$host} = [ $request_id ];
-      $kernel->post( poco_weeble_resolver =>
+      my $my_alias = $heap->{alias};
+      $kernel->post( "poco_${my_alias}_resolver" =>
                      resolve => got_dns_response => $host => "A", "IN"
                    );
     }
@@ -423,9 +445,11 @@ sub poco_weeble_do_connect {
 
   # Create a timeout timer.
   $request->[REQ_TIMER] =
-    $kernel->delay_set( got_timeout => $heap->{timeout} =>
-                        $request_id
-                      );
+    $kernel->delay_set
+      ( got_timeout =>
+        $heap->{timeout} - (time() - $request->[REQ_START_TIME]) =>
+        $request_id
+      );
 
   # Cross-reference the wheel and timer IDs back to the request.
   $heap->{timer_to_request}->{$request->[REQ_TIMER]} = $request_id;
@@ -1038,10 +1062,16 @@ PoCo::Client::HTTP's C<spawn> method takes a few named parameters:
 
 =item Agent => $user_agent_string
 
+=item Agent => \@list_of_agents
+
 C<Agent> defines the string that identifies the component to other
-servers.  $user_agent_string is "POE-Component-Client-HTTP/$VERSION",
-by default.  You may want to change this to help identify your own
+servers.  By default, PoCo::Client::HTTP will advertise itself and its
+version.  You may want to change this to help identify your own
 programs instead.
+
+C<Agent> may contain a reference to a list of user agents.  If this is
+the case, PoCo::Client::HTTP will choose one of them at random for
+each request.
 
 =item Alias => $session_alias
 
@@ -1075,7 +1105,7 @@ without the need to wade through <body></body>.
 
 C<NoProxy> specifies a list of server hosts that will not be proxied.
 It is useful for local hosts and hosts that do not properly support
-proxying.  I NoProxy is not specified, a list will be taken from the
+proxying.  If NoProxy is not specified, a list will be taken from the
 NO_PROXY environment variable.
 
   NoProxy => [ "localhost", "127.0.0.1" ],
@@ -1091,16 +1121,24 @@ Under normal circumstances, it should be left to its default value:
 
 =item Proxy => $proxy_url
 
-C<Proxy> specifies a proxy host that requests will be passed through.
-If not specified, a proxy server will be taken from the HTTP_PROXY
-environment variable.  If Proxy and HTTP_PROXY do not exist, then no
-proxying will occur.
+=item Proxy => $proxy_url,$proxy_url,...
 
-The proxy can be specified either as a host and port, or as an URL.
-Proxy URLs must specify the proxy port, even if it is 80.
+C<Proxy> specifies one or more proxy hosts that requests will be
+passed through.  If not specified, proxy servers will be taken from
+the HTTP_PROXY environment variable.  If Proxy and HTTP_PROXY do not
+exist, then no proxying will occur.
+
+The proxy can be specified either as a host and port, or as one or
+more URLs.  Proxy URLs must specify the proxy port, even if it is 80.
 
   Proxy => [ "127.0.0.1", 80 ],
   Proxy => "http://127.0.0.1:80/",
+
+C<Proxy> may specify multiple proxies separated by commas.
+PoCo::Client::HTTP will choose proxies from this list at random.  This
+is useful for load balancing requests through multiple gateways.
+
+  Proxy => "http://127.0.0.1:80/,http://127.0.0.1:81/",
 
 =item Streaming => OCTETS
 
