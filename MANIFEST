@@ -1,6 +1,7 @@
 # $Id$
 CHANGES
 CHANGES.OLD
+mylib/ExtUtils/AutoInstall.pm
 HTTP.pm
 MANIFEST
 Makefile.PL
