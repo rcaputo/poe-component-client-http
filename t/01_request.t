@@ -184,14 +184,32 @@ sub client_got_redir_response {
     warn "`", '-' x 78, "\n";
   };
 
-  if ( (defined $http_response->code) and
-       ($http_response->code == 200) and
-       ($http_response->base eq "http://poe.perl.org/misc/test.cgi") and
-       ($http_response->previous->base eq
-        "http://poe.perl.org/misc/redir-test.cgi"
-       )
-     ) {
-    $test_results[9] = 'ok 10';
+  if (defined $http_response->code) {
+    if ($http_response->code == 200) {
+      if ($http_response->base eq "http://poe.perl.org/misc/test.cgi") {
+        if (
+          $http_response->previous->base eq
+          "http://poe.perl.org/misc/redir-test.cgi"
+        ) {
+          $test_results[9] = "ok 10";
+        }
+        else {
+          $test_results[9] = (
+            "not ok 10 # bad previous base: " .
+            $http_response->previous->base
+          );
+        }
+      }
+      else {
+        $test_results[9] = "not ok 10 # bad base: " .  $http_response->base;
+      }
+    }
+    else {
+      $test_results[9] = "not ok 10 # bad code: " .  $http_response->code;
+    }
+  }
+  else {
+    $test_results[9] = "not ok 10 # undefined result code";
   }
 }
 
@@ -210,6 +228,8 @@ sub client_got_stream_response {
 
     my $response_string = $http_headers->as_string();
     $response_string =~ s/^/| /mg;
+
+    $chunk = "(undef)" unless defined $chunk;
 
     warn ",", '-' x 78, "\n";
     warn $response_string;
