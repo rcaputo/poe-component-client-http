@@ -8,7 +8,7 @@ use strict;
 sub DEBUG () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.45';
+$VERSION = '0.46';
 
 use Carp qw(croak);
 use POSIX;
@@ -369,7 +369,7 @@ sub poco_weeble_dns_answer {
 
   my $requests = delete $heap->{resolve}->{$request_address};
 
-  warn $request_address;
+  DEBUG and warn $request_address;
 
   # No requests are on record for this lookup.
   die unless defined $requests;
