@@ -8,7 +8,7 @@ use strict;
 sub DEBUG () { 0 };
 
 use vars qw($VERSION);
-$VERSION = '0.34';
+$VERSION = '0.35';
 
 use Carp qw(croak);
 use POSIX;
@@ -182,6 +182,11 @@ sub poco_weeble_request {
              );
   }
 
+  # If we have a cookie jar, have it frob our headers.  LWP rocks!
+  if (defined $heap->{cookie_jar}) {
+    $heap->{cookie_jar}->add_cookie_header($http_request);
+  }
+
   DEBUG and warn "weeble got a request...\n";
 
   # Get the host and port from the request object.
@@ -324,6 +329,12 @@ sub poco_weeble_io_error {
   # Otherwise the remote end simply closed.  If we've built a
   # response, then post it back.
   if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE)) {
+
+    # If we have a cookie jar, have it frob our headers.  LWP rocks!
+    if (defined $heap->{cookie_jar}) {
+      $heap->{cookie_jar}->extract_cookies($request->[REQ_RESPONSE]);
+    }
+
     $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE]);
     return;
   }
@@ -544,6 +555,11 @@ several sessions interact with HTTP components without keeping (or
 even knowing) hard references to them.  It's possible to spawn several
 HTTP components with different names.
 
+=item CookieJar => $cookie_jar
+
+C<CookieJar> sets the component's cookie jar.  It expects the cookie
+jar to be a reference to a HTTP::Cookies object.
+
 =item From => $admin_address
 
 C<From> holds an e-mail address where the client's administrator
@@ -600,7 +616,8 @@ information.
 
 This component is built upon HTTP::Request, HTTP::Response, and POE.
 Please see its source code and the documentation for its foundation
-modules to learn more.
+modules to learn more.  If you want to use cookies, you'll need to
+read about HTTP::Cookies as well.
 
 Also see the test program, t/01_request.t, in the PoCo::Client::HTTP
 distribution.
@@ -610,7 +627,7 @@ distribution.
 HTTP/1.1 requests are not supported.
 
 The following spawn() parameters are accepted but not yet implemented:
-Timeout, CookieJar, Proxy, NoProxy.
+Timeout, Proxy, NoProxy.
 
 =head1 AUTHOR & COPYRIGHTS
 
