@@ -14,7 +14,7 @@ close CHANGES;
 ExtUtils::AutoInstall->import
   ( -version => '0.32',
     -core    =>
-    [ 'POE'            => 0.1106,
+    [ 'POE'            => 0.22,
       'HTTP::Request'  => 1.27,
       'HTTP::Response' => 1.33,
       'URI'            => 1.11,
