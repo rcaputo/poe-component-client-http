@@ -14,6 +14,10 @@ other sessions.
 Requirements
 ------------
 
+POE::Component::Client::HTTP requires http://poe.perl.org/ to be
+available.  Transient network problems (or testing the module from a
+disconnected machine) may cause it to fail.
+
 This module requires POE, HTTP::Request, and HTTP::Response.  The
 requirements are encoded in Makefile.PL, so the CPAN shell should do
 the right thing.  If this is installed without the CPAN shell, the
