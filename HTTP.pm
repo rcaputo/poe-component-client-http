@@ -64,10 +64,16 @@ my $request_seq = 0;
 
 BEGIN {
   my $has_ssl = 0;
-  eval {
-    require POE::Component::Client::HTTP::SSL;
+  eval { require POE::Component::Client::HTTP::SSL };
+
+  if (defined $Net::SSLeay::VERSION and
+      defined $Net::SSLeay::Handle::VERSION and
+      $Net::SSLeay::VERSION >= 1.17 and
+      $Net::SSLeay::Handle::VERSION >= 0.61
+     ) {
     $has_ssl = 1;
-  };
+  }
+
   eval "sub HAS_SSL () { $has_ssl }";
 }
 
@@ -243,12 +249,6 @@ sub poco_weeble_request {
              and length $http_request->protocol()
            );
 
-  # Croak if no SSL and we need it.
-  if ($http_request->uri->scheme() eq 'https') {
-    croak "POE::Component::Client::HTTP requires Net::SSLeay::Handle for https"
-      unless HAS_SSL;
-  }
-
   # MEXNIX 2002-06-01: If we have a proxy set, and the request URI is
   # not in our no_proxy, then use the proxy.  Otherwise use the
   # request URI.
@@ -306,6 +306,32 @@ sub poco_weeble_request {
   # Get a unique request ID.
   my $request_id = ++$request_seq;
 
+  # Build the request.
+  my $request =
+    [ $sender->postback( $response_event, $http_request, $tag ), # REQ_POSTBACK
+      undef,              # REQ_WHEEL
+      $http_request,      # REQ_REQUEST
+      RS_CONNECT,         # REQ_STATE
+      undef,              # REQ_RESPONSE
+      '',                 # REQ_BUFFER
+      '',                 # REQ_LAST_HEADER
+      0,                  # REQ_OCTETS_GOT
+      "\x0D\x0A",         # REQ_NEWLINE
+      undef,              # REQ_TIMER
+      $progress_postback, # REQ_PROG_POSTBACK
+      $using_proxy,       # REQ_USING_PROXY
+      $host,              # REQ_HOST
+      $port,              # REQ_PORT
+    ];
+
+  # Bail out if no SSL and we need it.
+  if ($http_request->uri->scheme() eq 'https') {
+    unless (HAS_SSL) {
+      _post_error($request, "Net::SSLeay 1.17 or newer is required for https");
+      return;
+    }
+  }
+
   # If non-blocking DNS is available, and the host was supplied as a
   # name, then go through POE::Component::Client::DNS.  Otherwise go
   # directly to the SocketFactory stage.  -><- Should probably check
@@ -329,25 +355,8 @@ sub poco_weeble_request {
     $kernel->yield( do_connect => $request_id, $host );
   }
 
-  # Record information about the request.
-
-  $heap->{request}->{$request_id} =
-    [ $sender->postback( $response_event, $http_request, $tag ), # REQ_POSTBACK
-      undef,              # REQ_WHEEL
-      $http_request,      # REQ_REQUEST
-      RS_CONNECT,         # REQ_STATE
-      undef,              # REQ_RESPONSE
-      '',                 # REQ_BUFFER
-      '',                 # REQ_LAST_HEADER
-      0,                  # REQ_OCTETS_GOT
-      "\x0D\x0A",         # REQ_NEWLINE
-      undef,              # REQ_TIMER
-      $progress_postback, # REQ_PROG_POSTBACK
-      $using_proxy,       # REQ_USING_PROXY
-      $host,              # REQ_HOST
-      $port,              # REQ_PORT
-    ];
- }
+  $heap->{request}->{$request_id} = $request;
+}
 
 #------------------------------------------------------------------------------
 # Non-blocking DNS lookup stage.
@@ -356,29 +365,44 @@ sub poco_weeble_dns_answer {
   my ($kernel, $heap) = @_[KERNEL, HEAP];
   my $request_address = $_[ARG0]->[0];
   my $response_object = $_[ARG1]->[0];
+  my $response_error  = $_[ARG1]->[1];
 
   my $requests = delete $heap->{resolve}->{$request_address};
 
   warn $request_address;
 
-  if (defined $requests and defined $response_object) {
-    foreach my $answer ($response_object->answer()) {
-      next unless $answer->type eq "A";
+  # No requests are on record for this lookup.
+  die unless defined $requests;
 
-      DEBUG and
-        warn "DNS: $request_address resolves to ", $answer->rdatastr(), "\n";
-
-      foreach my $request_id (@$requests) {
-        $kernel->yield( do_connect => $request_id, $answer->rdatastr );
-      }
-      return;
+  # No response.
+  unless (defined $response_object) {
+    foreach my $request_id (@$requests) {
+      my $request = delete $heap->{request}->{$request_id};
+      _post_error($request, $response_error);
     }
+    return;
   }
 
-  die;
-  # fabricate an error response
-  # send it back
-  # clean up request
+  # A response!
+  foreach my $answer ($response_object->answer()) {
+    next unless $answer->type eq "A";
+
+    DEBUG and
+      warn "DNS: $request_address resolves to ", $answer->rdatastr(), "\n";
+
+    foreach my $request_id (@$requests) {
+      $kernel->yield( do_connect => $request_id, $answer->rdatastr );
+    }
+
+    # Return after the first good answer.
+    return;
+  }
+
+  # Didn't return here.  No address record for the host?
+  foreach my $request_id (@$requests) {
+    my $request = delete $heap->{request}->{$request_id};
+    _post_error($request, "Host has no address.");
+  }
 }
 
 #------------------------------------------------------------------------------
@@ -528,9 +552,7 @@ sub poco_weeble_connect_error {
   }
 
   # Post an error response back to the requesting session.
-  $request->[REQ_POSTBACK]->
-    ( HTTP::Response->new( 400, "$operation error $errnum: $errstr" )
-    );
+  _post_error($request, "$operation error $errnum: $errstr");
 }
 
 #------------------------------------------------------------------------------
@@ -827,6 +849,31 @@ sub _in_no_proxy {
     return 1 if $host =~ /\Q$no_proxy_domain\E$/i;
   }
   return 0;
+}
+
+#------------------------------------------------------------------------------
+# Post an error message.  This is not a POE function.
+
+sub _post_error {
+  my ($request, $message) = @_;
+
+  my $nl = "\n";
+
+  my $host = $request->[REQ_HOST];
+  my $port = $request->[REQ_PORT];
+
+  my $response = HTTP::Response->new(500);
+  $response->content
+    ( "<HTML>$nl" .
+      "<HEAD><TITLE>An Error Occurred</TITLE></HEAD>$nl" .
+      "<BODY>$nl" .
+      "<H1>An Error Occurred</H1>$nl" .
+      "500 Cannot connect to $host:$port ($message)$nl" .
+      "</BODY>$nl" .
+      "</HTML>$nl"
+    );
+
+  $request->[REQ_POSTBACK]->($response);
 }
 
 1;
