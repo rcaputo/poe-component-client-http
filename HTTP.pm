@@ -527,7 +527,7 @@ sub poco_weeble_connect_ok {
   if ($request->[REQ_REQUEST]->uri->scheme() eq 'https') {
     DEBUG and warn "wheel $wheel_id switching to SSL...\n";
 
-    # Net::SSLeay needs nonblocking for setup.
+    # Net::SSLeay needs blocking for setup.
     #
     # ActiveState Perl 5.8.0 dislikes the Win32-specific code to make
     # a socket blocking, so we use IO::Handle's blocking(1) method.
@@ -546,7 +546,7 @@ sub poco_weeble_connect_ok {
       unless ($^O eq 'MSWin32') {
         my $flags = fcntl($old_socket, F_GETFL, 0)
           or die "fcntl($old_socket, F_GETFL, etc.) fails: $!";
-        until (fcntl($old_socket, F_SETFL, $flags | ~O_NONBLOCK)) {
+        until (fcntl($old_socket, F_SETFL, $flags & ~O_NONBLOCK)) {
           die "fcntl($old_socket, FSETFL, etc) fails: $!"
             unless $! == EAGAIN or $! == EWOULDBLOCK;
         }
@@ -1167,7 +1167,7 @@ sub _respond {
       my $tmpresponse = $response;
       while (defined $heap->{redir}->{$request_id}->{from}) {
         my $prev = $heap->{redir}->{$request_id}->{from};
-        $tmpresponse->previous(delete$heap->{redir}->{$prev}->{response});
+        $tmpresponse->previous(delete $heap->{redir}->{$prev}->{response});
         $tmpresponse = $tmpresponse->previous();
 	$request_id = $prev;
       }
