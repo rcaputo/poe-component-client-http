@@ -779,7 +779,7 @@ sub poco_weeble_io_read {
     # bogus headers in the content?
     if (
       $request->[REQ_BUFFER] =~
-      s/^(HTTP\/[0-9\.]+)?\s*(\d+)\s*(.*?)([\x0D\x0A]+)([^\x0D\x0A])/$5/
+      s/^([A-Z]+(?:\/[0-9\.]+)?)?\s*(\d+)\s*(.*?)([\x0D\x0A]+)([^\x0D\x0A])/$5/x
     ) {
       DEBUG and
         warn "wheel $wheel_id got a status line... moving to headers.\n";
