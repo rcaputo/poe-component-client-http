@@ -13,7 +13,7 @@ open(CHANGES, ">>CHANGES") and close CHANGES;
 ExtUtils::AutoInstall->import
   ( -version => '0.50',
     -core    =>
-    [ 'POE'            => 0.25,
+    [ 'POE'            => 0.27,
       'HTTP::Request'  => 1.27,
       'HTTP::Response' => 1.33,
       'URI'            => 1.11,
