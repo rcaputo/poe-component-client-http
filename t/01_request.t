@@ -13,9 +13,11 @@ sub DEBUG          () { 0 }
 sub TEST_BIG_STUFF () { 0 }  # requires localhost:19
 
 $| = 1;
-print "1..4\n";
+print "1..5\n";
 
-my @test_results = ( 'not ok 1', 'not ok 2', 'not ok 3', 'not ok 4' );
+my @test_results = ( 'not ok 1', 'not ok 2', 'not ok 3', 'not ok 4',
+                     'ok 5',
+                   );
 
 BEGIN {
   eval { require Net::SSLeay::Handle; };
@@ -62,6 +64,10 @@ sub client_start {
     $test_results[3] = 'ok 4 # skipped: need Net::SSLeay::Handle to test SSL';
   }
 
+  $kernel->post( weeble => request => got_response =>
+                 GET 'http://poe.perl.org',
+               );
+
   if (TEST_BIG_STUFF) {
     $kernel->post( weeble => request => got_response =>
                    GET 'http://127.0.0.1:19/'
@@ -94,15 +100,20 @@ sub client_got_response {
 
   my $request_path = $http_request->uri->path . ''; # stringify
 
-  if ($http_response->code == 200) {
-    my $response_string = $http_response->as_string();
-    $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
-    $test_results[1] = 'ok 2' if $response_string =~ /cgi_field_six/;
-    $test_results[2] = 'ok 3' if $response_string =~ /cgi_field_fiv/;
+  if (defined $http_response->code) {
+    if ($http_response->code == 200) {
+      my $response_string = $http_response->as_string();
+      $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
+      $test_results[1] = 'ok 2' if $response_string =~ /cgi_field_six/;
+      $test_results[2] = 'ok 3' if $response_string =~ /cgi_field_fiv/;
+    }
+    elsif ($http_response->code == 302) {
+      my $response_string = $http_response->as_string();
+      $test_results[3] = 'ok 4' if $response_string =~ /projects\/poe/;
+    }
   }
-  elsif ($http_response->code == 302) {
-    my $response_string = $http_response->as_string();
-    $test_results[3] = 'ok 4' if $response_string =~ /projects\/poe/;
+  else {
+    $test_results[4] = 'not ok 5';
   }
 }
 
