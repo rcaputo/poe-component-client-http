@@ -9,7 +9,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.56';
+$VERSION = '0.57';
 
 use Carp qw(croak);
 use POSIX;
@@ -50,9 +50,9 @@ sub RS_CONNECT      () { 0x01 }
 sub RS_SENDING      () { 0x02 }
 sub RS_IN_STATUS    () { 0x04 }
 sub RS_IN_HEADERS   () { 0x08 }
-sub RS_CHK_REDIRECT () { 0x09 }
-sub RS_IN_CONTENT   () { 0x10 }
-sub RS_DONE         () { 0x20 }
+sub RS_CHK_REDIRECT () { 0x10 }
+sub RS_IN_CONTENT   () { 0x20 }
+sub RS_DONE         () { 0x40 }
 
 sub PROXY_HOST () { 0 }
 sub PROXY_PORT () { 1 }
@@ -504,10 +504,40 @@ sub poco_weeble_connect_ok {
     DEBUG and warn "wheel $wheel_id switching to SSL...\n";
 
     # Net::SSLeay needs nonblocking for setup.
+    #
+    # ActiveState Perl 5.8.0 dislikes the Win32-specific code to make
+    # a socket blocking, so we use IO::Handle's blocking(1) method.
+    # Perl 5.005_03 doesn't like blocking(), so we only use it in
+    # 5.8.0 and beyond.
+    #
+    # TODO - This code should probably become a POE::Kernel method,
+    # seeing as it's rather baroque and potentially useful in a number
+    # of places.
     my $old_socket = $socket;
-    my $flags = fcntl($old_socket, F_GETFL, 0) or die $!;
-    until (fcntl($old_socket, F_SETFL, $flags & ~O_NONBLOCK)) {
-      die $! unless $! == EAGAIN or $! == EWOULDBLOCK;
+    if ($] >= 5.008) {
+      $old_socket->blocking(1);
+    }
+    else {
+      # Make the handle blocking, the POSIX way.
+      unless ($^O eq 'MSWin32') {
+        my $flags = fcntl($old_socket, F_GETFL, 0)
+          or die "fcntl($old_socket, F_GETFL, etc.) fails: $!";
+        until (fcntl($old_socket, F_SETFL, $flags | ~O_NONBLOCK)) {
+          die "fcntl($old_socket, FSETFL, etc) fails: $!"
+            unless $! == EAGAIN or $! == EWOULDBLOCK;
+        }
+      }
+      # Do it the Win32 way.
+      else {
+        my $set_it = "0";
+
+        # 126 is FIONBIO (some docs say 0x7F << 16)
+        ioctl( $old_socket,
+               0x80000000 | (4 << 16) | (ord('f') << 8) | 126,
+               $set_it
+             )
+          or die "ioctl($old_socket, FIONBIO, $set_it) fails: $!";
+      }
     }
 
     $socket = gensym();
@@ -721,12 +751,8 @@ sub poco_weeble_io_read {
   DEBUG and warn "wheel $wheel_id got input...\n";
   DEBUG_DATA and warn(_hexdump($input), "\n");
 
-  # Reset the timeout if we get data.  -><- I think it is possible for
-  # this to gradually lose time, eventually timing out anyway over the
-  # course of a long download.  It may be more proper to have a
-  # delay_adjust() in POE::Kernel that resets an alarm to an offset
-  # from the current time.
-  $kernel->alarm_adjust( $request->[REQ_TIMER], $heap->{timeout} );
+  # Reset the timeout if we get data.
+  $kernel->delay_adjust($request->[REQ_TIMER], $heap->{timeout});
 
   # Aggregate the new input.
   $request->[REQ_BUFFER] .= $input;
