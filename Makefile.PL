@@ -3,6 +3,10 @@
 
 use ExtUtils::MakeMaker;
 
+# Ensure that ./CHANGES exists.
+open(CHANGES, ">>CHANGES");
+close CHANGES;
+
 WriteMakefile
   ( NAME         => 'POE::Component::Client::HTTP',
     AUTHOR       => 'Rocco Caputo <troc+poe@netrus.net>',
