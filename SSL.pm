@@ -13,18 +13,18 @@ use vars qw(@ISA);
 @ISA = qw(Net::SSLeay::Handle);
 
 sub READ {
-    my ($socket, $buf, $len, $offset) = \ (@_);
-    my $ssl = $$socket->_get_ssl();
-    defined($$offset) or
-      return length($$buf = Net::SSLeay::read($ssl, $$len));
+  my ($socket, $buf, $len, $offset) = \ (@_);
+  my $ssl = $$socket->_get_ssl();
+  defined($$offset) or
+    return length($$buf = Net::SSLeay::read($ssl, $$len));
 
-    defined(my $read = Net::SSLeay::read($ssl, $$len))
-      or return undef;
+  defined(my $read = Net::SSLeay::read($ssl, $$len))
+    or return undef;
 
-    my $buf_len = length($$buf);
-    $$offset > $buf_len and $$buf .= chr(0) x ($$offset - $buf_len);
-    substr($$buf, $$offset) = $read;
-    return length($read);
+  my $buf_len = length($$buf);
+  $$offset > $buf_len and $$buf .= chr(0) x ($$offset - $buf_len);
+  substr($$buf, $$offset) = $read;
+  return length($read);
 }
 
 1;
