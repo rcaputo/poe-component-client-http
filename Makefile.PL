@@ -26,6 +26,9 @@ ExtUtils::AutoInstall->import
     ],
   );
 
+# To mollify a recent warning in POE::Kernel.
+$POE::Kernel::poe_kernel->run();
+
 # Write that makefile.
 WriteMakefile
   ( NAME         => 'POE::Component::Client::HTTP',
