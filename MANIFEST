@@ -2,6 +2,6 @@
 CHANGES
 MANIFEST
 Makefile.PL
-POE/Component/Client/HTTP.pm
+HTTP.pm
 README
 t/01_request.t
