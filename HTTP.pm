@@ -5,7 +5,7 @@ package POE::Component::Client::HTTP;
 
 use strict;
 
-sub DEBUG      () { 1 }
+sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
@@ -230,7 +230,7 @@ sub poco_weeble_start {
           "| from      : ", no_undef($heap->{from}), "\n",
           "| proxy     : ", no_undef_list($heap->{proxy}), "\n",
           "| no_proxy  : ", no_undef_list($heap->{no_proxy}), "\n",
-          "'-----------------------------------------\n",
+          "`-----------------------------------------\n",
         );
   };
 
@@ -518,7 +518,7 @@ sub poco_weeble_connect_ok {
   # Switch wheels.  This is a bit cumbersome, but it works around a
   # bug in older versions of POE.
 
-  undef $request->[REQ_WHEEL];
+  $request->[REQ_WHEEL] = undef;
   $request->[REQ_WHEEL] = $new_wheel;
 
   # We're now in a sending state.
@@ -572,7 +572,7 @@ sub poco_weeble_connect_error {
 
   # Drop the wheel and its cross-references.
   my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
-  die unless defined $request_id;
+  die "expected a request ID, but there is none" unless defined $request_id;
 
   my $request = delete $heap->{request}->{$request_id};
 
@@ -592,13 +592,14 @@ sub poco_weeble_timeout {
 
   DEBUG and warn "request $request_id timed out\n";
 
-  # Drop the wheel and its cross-references.
+  # Discard the request.  Keep a copy for a few bits of cleanup.
   my $request = delete $heap->{request}->{$request_id};
 
+  # There's a wheel attached to the request.  Shut it down.
   if (defined $request->[REQ_WHEEL]) {
     my $wheel_id = $request->[REQ_WHEEL]->ID();
-    delete $heap->{wheel_to_request}->{$wheel_id};
     DEBUG and warn "request $request_id is wheel $wheel_id\n";
+    delete $heap->{wheel_to_request}->{$wheel_id};
   }
 
   # No need to remove the alarm here because it's already gone.
