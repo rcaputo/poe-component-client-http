@@ -6,23 +6,11 @@ package POE::Component::Client::HTTP::SSL;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = sprintf("%.3f",(qw($Revision$ ))[1]);
+$VERSION = (qw($Revision$ ))[1];
 
 use Net::SSLeay::Handle;
 use vars qw(@ISA);
 @ISA = qw(Net::SSLeay::Handle);
-use Carp qw(croak);
-
-sub WRITE {
-  my $socket = shift;
-  my ($buf, $len, $offset) = @_;
-  $offset = 0 unless defined $offset;
-
-  # Return number of characters written.
-  my $ssl  = $socket->_get_ssl();
-  return $len if Net::SSLeay::write($ssl, substr($buf, $offset, $len));
-  return undef;
-}
 
 sub READ {
     my ($socket, $buf, $len, $offset) = \ (@_);
