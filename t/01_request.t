@@ -9,14 +9,16 @@ use lib '/home/troc/perl/poe';
 sub POE::Kernel::ASSERT_DEFAULT () { 1 }
 use POE qw(Component::Client::HTTP);
 
-sub DEBUG          () { 0 }
-sub TEST_BIG_STUFF () { 0 }  # requires localhost:19
+sub DEBUG () { 0 }
+
+sub MAX_BIG_REQUEST_SIZE  () { 4096 }
+sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
 
 $| = 1;
-print "1..6\n";
+print "1..8\n";
 
 my @test_results = ( 'not ok 1', 'not ok 2', 'not ok 3', 'not ok 4',
-                     'ok 5', 'not ok 6',
+                     'ok 5', 'not ok 6', 'not ok 7', 'not ok 8',
                    );
 
 BEGIN {
@@ -70,11 +72,13 @@ sub client_start {
                  GET 'http://foo.poe.perl.org/'
                );
 
-  if (TEST_BIG_STUFF) {
-    $kernel->post( weeble => request => got_response =>
-                   GET 'http://127.0.0.1:19/'
-                 );
-  }
+  $kernel->post( weeble => request => got_big_response =>
+                 GET 'http://poe.perl.org/misc/stream-test.cgi'
+               );
+
+  $kernel->post( streamer => request => got_stream_response =>
+                 GET 'http://poe.perl.org/misc/stream-test.cgi'
+               );
 }
 
 sub client_stop {
@@ -123,21 +127,100 @@ sub client_got_response {
   }
 }
 
+sub client_got_big_response {
+  my ($heap, $request_packet, $response_packet) = @_[HEAP, ARG0, ARG1];
+  my $http_request  = $request_packet->[0];
+  my $http_response = $response_packet->[0];
+
+  DEBUG and do {
+    warn "client got big request...\n";
+
+    my $response_string = $http_response->as_string();
+    $response_string =~ s/^/| /mg;
+
+    warn ",", '-' x 78, "\n";
+    warn $response_string;
+    warn "`", '-' x 78, "\n";
+  };
+
+  if ( (defined $http_response->code) and
+       ($http_response->code == 200) and
+       (length($http_response->content()) == MAX_BIG_REQUEST_SIZE)
+     ) {
+    $test_results[6] = 'ok 7';
+  }
+}
+
+my $total_octets_got = 0;
+my $chunk_buffer = "";
+my $next_chunk_character = "A";
+my $test_8_failed = 0;
+
+sub client_got_stream_response {
+  my ($heap, $request_packet, $response_packet) = @_[HEAP, ARG0, ARG1];
+  my $http_request = $request_packet->[0];
+  my ($http_headers, $chunk) = @$response_packet;
+
+  DEBUG and do {
+    warn "client got stream request...\n";
+
+    my $response_string = $http_headers->as_string();
+    $response_string =~ s/^/| /mg;
+
+    warn ",", '-' x 78, "\n";
+    warn $response_string;
+    warn "`", '-' x 78, "\n";
+    warn $chunk, "\n";
+    warn "`", '-' x 78, "\n";
+  };
+
+  return if $test_8_failed;
+
+  if (defined $chunk) {
+    $chunk_buffer .= $chunk;
+    $total_octets_got += length($chunk);
+    while (length($chunk_buffer) >= MAX_STREAM_CHUNK_SIZE) {
+      my $next_chunk = substr($chunk_buffer, 0, MAX_STREAM_CHUNK_SIZE);
+      substr($chunk_buffer, 0, MAX_STREAM_CHUNK_SIZE) = "";
+      $test_8_failed++
+        unless( $next_chunk eq
+                ($next_chunk_character x MAX_STREAM_CHUNK_SIZE)
+              );
+      $next_chunk_character++;
+    }
+  }
+  else {
+    $test_results[7] = 'ok 8'
+      if ( ($total_octets_got == 26 * MAX_STREAM_CHUNK_SIZE)
+           and ($next_chunk_character eq "AA")
+           and (length($chunk_buffer) == 0)
+         );
+  }
+}
+
 #------------------------------------------------------------------------------
 
 # Create a weeble component.
 POE::Component::Client::HTTP->spawn
-  ( MaxSize => 4096,
+  ( MaxSize => MAX_BIG_REQUEST_SIZE,
     Timeout => 180,
+  );
+
+# Create one for streaming.
+POE::Component::Client::HTTP->spawn
+  ( Streaming => MAX_STREAM_CHUNK_SIZE,
+    Alias     => "streamer",
   );
 
 # Create a session that will make some requests.
 POE::Session->create
   ( inline_states =>
-    { _start       => \&client_start,
-      _stop        => \&client_stop,
-      got_response => \&client_got_response,
-      _signal      => sub { 0 },
+    { _start              => \&client_start,
+      _stop               => \&client_stop,
+      got_response        => \&client_got_response,
+      got_big_response    => \&client_got_big_response,
+      got_stream_response => \&client_got_stream_response,
+      _signal             => sub { 0 },
     }
   );
 
