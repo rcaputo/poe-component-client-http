@@ -5,10 +5,11 @@ package POE::Component::Client::HTTP;
 
 use strict;
 
-sub DEBUG () { 0 }
+sub DEBUG      () { 0 }
+sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.46';
+$VERSION = '0.47';
 
 use Carp qw(croak);
 use POSIX;
@@ -314,7 +315,7 @@ sub poco_weeble_request {
       RS_CONNECT,         # REQ_STATE
       undef,              # REQ_RESPONSE
       '',                 # REQ_BUFFER
-      '',                 # REQ_LAST_HEADER
+      undef,              # REQ_LAST_HEADER
       0,                  # REQ_OCTETS_GOT
       "\x0D\x0A",         # REQ_NEWLINE
       undef,              # REQ_TIMER
@@ -653,6 +654,7 @@ sub poco_weeble_io_read {
   my $request = $heap->{request}->{$request_id};
 
   DEBUG and warn "wheel $wheel_id got input...\n";
+  DEBUG_DATA and warn(_hexdump($input), "\n");
 
   # Aggregate the new input.
   $request->[REQ_BUFFER] .= $input;
@@ -676,6 +678,9 @@ sub poco_weeble_io_read {
       else {
         $protocol= 'HTTP/0.9';
       }
+
+      DEBUG_DATA and
+        warn "wheel $wheel_id status: proto($protocol) code($2) msg($3)\n";
 
       $request->[REQ_STATE]    = RS_IN_HEADERS;
       $request->[REQ_NEWLINE]  = $4;
@@ -716,15 +721,24 @@ HEADER:
 
         # Continued header.
         elsif ($line =~ /^\s+(.+?)\s*$/) {
-          DEBUG and
-            warn( "wheel $wheel_id got a continuation for header ",
-                  $request->[REQ_LAST_HEADER],
-                  " ...\n"
-                );
+          if (defined $request->[REQ_LAST_HEADER]) {
+            DEBUG and
+              warn( "wheel $wheel_id got a continuation for header ",
+                    $request->[REQ_LAST_HEADER],
+                    " ...\n"
+                  );
 
-          $request->[REQ_RESPONSE]->push_header
-            ( $request->[REQ_LAST_HEADER], $1
-            );
+            $request->[REQ_RESPONSE]->push_header
+              ( $request->[REQ_LAST_HEADER], $1
+              );
+          }
+          else {
+            DEBUG and warn "wheel $wheel_id got continued status message...\n";
+
+            my $message = $request->[REQ_RESPONSE]->message();
+            $message .= " " . $1;
+            $request->[REQ_RESPONSE]->message($message);
+          }
         }
 
         # Dunno what.
@@ -849,6 +863,29 @@ sub _in_no_proxy {
     return 1 if $host =~ /\Q$no_proxy_domain\E$/i;
   }
   return 0;
+}
+
+#------------------------------------------------------------------------------
+# Generate a hex dump of some input.  This is not a POE function.
+
+sub _hexdump {
+  my $data = shift;
+
+  my $dump;
+  my $offset = 0;
+  while (length $data) {
+    my $line = substr($data, 0, 16);
+    substr($data, 0, 16) = '';
+
+    my $hexdump  = unpack 'H*', $line;
+    $hexdump =~ s/(..)/$1 /g;
+
+    $line =~ tr[ -~][.]c;
+    $dump .= sprintf( "%04x %-47.47s - %s\n", $offset, $hexdump, $line );
+    $offset += 16;
+  }
+
+  return $dump;
 }
 
 #------------------------------------------------------------------------------
