@@ -1224,4 +1224,6 @@ All rights are reserved.  POE::Component::Client::HTTP is free
 software; you may redistribute it and/or modify it under the same
 terms as Perl itself.
 
+Rocco may be contacted by e-mail via rcaputo@cpan.org.
+
 =cut
