@@ -9,7 +9,8 @@ use lib '/home/troc/perl/poe';
 sub POE::Kernel::ASSERT_DEFAULT () { 1 }
 use POE qw(Component::Client::HTTP);
 
-sub DEBUG () { 0 };
+sub DEBUG          () { 0 }
+sub TEST_BIG_STUFF () { 0 }  # requires localhost:19
 
 $| = 1;
 print "1..2\n";
@@ -36,6 +37,12 @@ sub client_start {
                    ]
                  )
                );
+
+  if (TEST_BIG_STUFF) {
+    $kernel->post( weeble => request => got_response =>
+                   GET 'http://127.0.0.1:19/'
+                 );
+  }
 }
 
 sub client_stop {
@@ -72,7 +79,7 @@ sub client_got_response {
 #------------------------------------------------------------------------------
 
 # Create a weeble component.
-POE::Component::Client::HTTP->spawn();
+POE::Component::Client::HTTP->spawn( MaxSize => 4096 );
 
 # Create a session that will make some requests.
 POE::Session->create
@@ -80,6 +87,7 @@ POE::Session->create
     { _start       => \&client_start,
       _stop        => \&client_stop,
       got_response => \&client_got_response,
+      _signal      => sub { 0 },
     }
   );
 

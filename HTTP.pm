@@ -8,7 +8,7 @@ use strict;
 sub DEBUG () { 0 };
 
 use vars qw($VERSION);
-$VERSION = '0.36';
+$VERSION = '0.37';
 
 use Carp qw(croak);
 use POSIX;
@@ -59,6 +59,8 @@ sub spawn {
                     $VERSION,
                   ) unless defined $agent and length $agent;
 
+  my $max_size = delete $params{MaxSize};
+
   my $protocol = delete $params{Protocol};
   $protocol = 'HTTP/1.0' unless defined $protocol and length $protocol;
 
@@ -90,6 +92,9 @@ sub spawn {
 
         # I/O timeout.
         got_timeout       => \&poco_weeble_timeout,
+
+        # Sorry, don't handle signals.
+        _signal           => sub { 0 },
       },
       args => [ $alias,      # ARG0
                 $timeout,    # ARG1
@@ -99,6 +104,7 @@ sub spawn {
                 $proxy,      # ARG5
                 $no_proxy,   # ARG6
                 $protocol,   # ARG7
+                $max_size,   # ARG8
               ],
     );
 
@@ -108,9 +114,10 @@ sub spawn {
 #------------------------------------------------------------------------------
 
 sub poco_weeble_start {
-  my ( $kernel, $heap, $alias, $timeout, $agent, $cookie_jar, $from,
-       $proxy, $no_proxy, $protocol
-     ) = @_[KERNEL, HEAP, ARG0..ARG7];
+  my ( $kernel, $heap,
+       $alias, $timeout, $agent, $cookie_jar, $from,
+       $proxy, $no_proxy, $protocol, $max_size
+     ) = @_[KERNEL, HEAP, ARG0..$#_];
 
   DEBUG and do {
     sub no_undef { (defined $_[0]) ? $_[0] : '(undef)' };
@@ -119,6 +126,7 @@ sub poco_weeble_start {
     warn "| timeout   : $timeout\n";
     warn "| agent     : $agent\n";
     warn "| protocol  : $protocol\n";
+    warn "| max_size  : ", &no_undef($max_size), "\n";
     warn "| cookie_jar: ", &no_undef($cookie_jar), "\n";
     warn "| from      : ", &no_undef($from), "\n";
     warn "| proxy     : ", &no_undef($proxy), "\n";
@@ -135,6 +143,8 @@ sub poco_weeble_start {
   $heap->{agent}      = $agent;
   $heap->{from}       = $from;
   $heap->{protocol}   = $protocol;
+
+  $heap->{max_size}   = $max_size;
 
   $kernel->alias_set($alias);
 }
@@ -386,6 +396,9 @@ sub poco_weeble_io_read {
       $request->[REQ_RESPONSE] = HTTP::Response->new( $2, $3 );
       $request->[REQ_RESPONSE]->protocol( $protocol );
       $request->[REQ_RESPONSE]->request( $request->[REQ_REQUEST] );
+
+      # Reset the octets count for testing the body size.
+      $request->[REQ_OCTETS_GOT] = length($request->[REQ_BUFFER]);
     }
 
     # No status line.  We go straight into content.  Since we don't
@@ -476,20 +489,54 @@ HEADER:
 
     # Stop reading when we have enough content.  -><- Should never be
     # greater than our content length.
-    if ( $request->[REQ_RESPONSE]->content_length()
-         and ( $request->[REQ_OCTETS_GOT] >=
-               $request->[REQ_RESPONSE]->content_length()
-             )
-       )
-    {
+    if ( $request->[REQ_RESPONSE]->content_length() ) {
+
+      if ( $request->[REQ_OCTETS_GOT] >=
+           $request->[REQ_RESPONSE]->content_length()
+         )
+      {
+        DEBUG and
+          warn "wheel $wheel_id has a full response... moving to done.\n";
+
+        $request->[REQ_STATE] = RS_DONE;
+
+        # -><- This assumes the server will now disconnect.  That will
+        # give us an error 0 (socket's closed), and we will post the
+        # response.
+      }
+    }
+  }
+
+  unless ($request->[REQ_STATE] & RS_DONE) {
+    if ( defined($heap->{max_size}) and
+         $request->[REQ_OCTETS_GOT] >= $heap->{max_size}
+       ) {
       DEBUG and
-        warn "wheel $wheel_id has a full response... moving to done.\n";
+        warn "wheel $wheel_id got enough data... moving to done.\n";
+
+      if ( defined($request->[REQ_RESPONSE]) and
+           defined($request->[REQ_RESPONSE]->code())
+         ) {
+        $request->[REQ_RESPONSE]->header
+          ( 'X-Content-Range',
+            'bytes 0-' . $request->[REQ_OCTETS_GOT] .
+            ( $request->[REQ_RESPONSE]->content_length()
+              ? ('/' . $request->[REQ_RESPONSE]->content_length())
+              : ''
+            )
+          );
+      }
+      else {
+        $request->[REQ_RESPONSE] =
+          HTTP::Response->new( 400, "Response too large (and no headers)"
+                             );
+      }
 
       $request->[REQ_STATE] = RS_DONE;
 
-      # -><- This assumes the server will now disconnect.  That will
-      # give us an error 0 (socket's closed), and we will post the
-      # response.
+      # Hang up on purpose.
+      delete $heap->{request}->{$wheel_id};
+      $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE]);
     }
   }
 }
