@@ -9,7 +9,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.58';
+$VERSION = '0.5801';
 
 use Carp qw(croak);
 use POSIX;
@@ -948,7 +948,6 @@ HEADER:
     else {
       $request->[REQ_RESPONSE]->add_content($request->[REQ_BUFFER]);
     }
-    $request->[REQ_BUFFER] = '';
 
     DEBUG and do {
       warn "wheel $wheel_id got $this_chunk_length octets of content...\n";
@@ -965,19 +964,20 @@ HEADER:
     # greater than our content length.
     if ( $request->[REQ_RESPONSE]->content_length() ) {
 
-      my $progress = int( ($request->[REQ_OCTETS_GOT] * 100) /
-                          $request->[REQ_RESPONSE]->content_length()
-                        );
+      # TODO - Remove this?  Or pass the information to the user?
+      #my $progress = int( ($request->[REQ_OCTETS_GOT] * 100) /
+      #                    $request->[REQ_RESPONSE]->content_length()
+      #                  );
 
-      $request->[REQ_PROG_POSTBACK]->
-        ( $request->[REQ_OCTETS_GOT],
-          $request->[REQ_RESPONSE]->content_length()
-        ) if $request->[REQ_PROG_POSTBACK];
+      $request->[REQ_PROG_POSTBACK]->(
+        $request->[REQ_OCTETS_GOT],
+        $request->[REQ_RESPONSE]->content_length(),
+        $request->[REQ_BUFFER],
+      ) if $request->[REQ_PROG_POSTBACK];
 
-      if ( $request->[REQ_OCTETS_GOT] >=
-           $request->[REQ_RESPONSE]->content_length()
-         )
-      {
+      if (
+        $request->[REQ_OCTETS_GOT] >= $request->[REQ_RESPONSE]->content_length()
+      ) {
         DEBUG and
           warn "wheel $wheel_id has a full response... moving to done.\n";
 
@@ -989,6 +989,8 @@ HEADER:
       }
     }
   }
+
+  $request->[REQ_BUFFER] = '';
 
   unless ($request->[REQ_STATE] & RS_DONE) {
     if ( defined($heap->{max_size}) and
@@ -1377,14 +1379,15 @@ download completion.
 
     my $req = $gen_args->[0];    # HTTP::Request object being serviced
     my $tag = $gen_args->[1];    # Request ID tag from.
-    my $got = $call_args->[0];   # Bytes retrieved so far.
+    my $got = $call_args->[0];   # Number of bytes retrieved so far.
     my $tot = $call_args->[1];   # Total bytes to be retrieved.
+    my $oct = $call_args->[2];   # Chunk of raw octets received this time.
 
     my $percent = $got / $tot * 100;
 
-    printf( "-- %.0f%% [%d/%d]: %s\n",
-            $percent, $got, $tot, $req->uri()
-          );
+    printf(
+      "-- %.0f%% [%d/%d]: %s\n", $percent, $got, $tot, $req->uri()
+    );
   }
 
 =head1 ENVIRONMENT
