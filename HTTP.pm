@@ -733,7 +733,7 @@ sub poco_weeble_io_read {
 
     # No status line.  We go straight into content.  Since we don't
     # know the status, we don't purport to.
-    else {
+    elsif ($request->[REQ_BUFFER] =~ /[\x0D\x0A]+[^\x0D\x0A]/) {
       DEBUG and warn "wheel $wheel_id got no status... moving to content.\n";
       $request->[REQ_RESPONSE] = HTTP::Response->new();
       $request->[REQ_STATE] = RS_IN_CONTENT;
