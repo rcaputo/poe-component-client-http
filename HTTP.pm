@@ -9,7 +9,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.52';
+$VERSION = '0.5201';
 
 use Carp qw(croak);
 use POSIX;
@@ -592,7 +592,9 @@ sub poco_weeble_timeout {
   my $request = delete $heap->{request}->{$request_id};
 
   if (defined $request->[REQ_WHEEL]) {
-    delete $heap->{wheel_to_request}->{ $request->[REQ_WHEEL]->ID() };
+    my $wheel_id = $request->[REQ_WHEEL]->ID();
+    delete $heap->{wheel_to_request}->{$wheel_id};
+    DEBUG and warn "request $request_id is wheel $wheel_id\n";
   }
 
   # No need to remove the alarm here because it's already gone.
@@ -618,6 +620,13 @@ sub poco_weeble_io_flushed {
 
   my $request = $heap->{request}->{$request_id};
   $request->[REQ_STATE] = RS_IN_STATUS;
+
+  # Shutdown the sending side of the socket, but only if we're not
+  # using https.  SSL apparently requires bidirectional chat
+  # throughout.
+  if ($request->[REQ_REQUEST]->uri->scheme() ne 'https') {
+    $request->[REQ_WHEEL]->shutdown_output();
+  }
 }
 
 #------------------------------------------------------------------------------
