@@ -22,6 +22,8 @@ WriteMakefile
     dist         =>
     { COMPRESS   => 'gzip -9f',
       SUFFIX     => 'gz',
-      PREOP      => qq(cvs2cl.pl -l "-d'a year ago<'" --utc --file CHANGES),
+      PREOP      => ( 'cvs2cl.pl -l "-d\'a year ago<\'" ' .
+                    '--utc --stdout > $(DISTNAME)-$(VERSION)/CHANGES'
+                    ),
     },
   );
