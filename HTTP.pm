@@ -9,7 +9,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.62';
+$VERSION = '0.63';
 
 use Carp qw(croak);
 use POSIX;
@@ -18,6 +18,15 @@ use HTTP::Response;
 use HTTP::Status qw(status_message);
 use URI;
 use HTML::HeadParser;
+
+# Allow more finely grained timeouts if Time::HiRes is available.
+BEGIN {
+  local $SIG{'__DIE__'} = 'DEFAULT';
+  eval {
+    require Time::HiRes;
+    Time::HiRes->import("time");
+  };
+}
 
 use POE qw(
   Wheel::SocketFactory Wheel::ReadWrite
@@ -676,7 +685,7 @@ sub poco_weeble_timeout {
   delete $heap->{timer_to_request}->{ $request->[REQ_TIMER] };
 
   # Post an error response back to the requesting session.
-  $request->[REQ_POSTBACK]->(HTTP::Response->new(400, "Request timed out"));
+  $request->[REQ_POSTBACK]->(HTTP::Response->new(408, "Request timed out"));
 }
 
 #------------------------------------------------------------------------------

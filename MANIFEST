@@ -8,3 +8,4 @@ Makefile.PL
 README
 SSL.pm
 t/01_request.t
+META.yml                                 Module meta-data (added by MakeMaker)
