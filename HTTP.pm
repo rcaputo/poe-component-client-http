@@ -142,7 +142,7 @@ sub spawn {
 
   my $max_size = delete $params{MaxSize};
 
-  my $streams = delete $params{Streaming};
+  my $streaming = delete $params{Streaming};
 
   my $protocol = delete $params{Protocol};
   $protocol = 'HTTP/1.0' unless defined $protocol and length $protocol;
@@ -224,7 +224,7 @@ sub spawn {
       from        => $from,
       protocol    => $protocol,
       max_size    => $max_size,
-      streams     => $streams,
+      streaming   => $streaming,
     },
   );
 
@@ -246,7 +246,7 @@ sub poco_weeble_start {
       "| agent     : ", no_undef_list($heap->{agent}), "\n",
       "| protocol  : $heap->{protocol}\n",
       "| max_size  : ", no_undef($heap->{max_size}), "\n",
-      "| streams   : ", no_undef($heap->{streams}), "\n",
+      "| streaming : ", no_undef($heap->{streaming}), "\n",
       "| cookie_jar: ", no_undef($heap->{cookie_jar}), "\n",
       "| from      : ", no_undef($heap->{from}), "\n",
       "| proxy     : ", no_undef_list($heap->{proxy}), "\n",
@@ -994,7 +994,7 @@ HEADER:
     # If we are streaming, send the chunk back to the client session.
     # Otherwise add the new octets to the response's content.  -><-
     # This should only add up to content-length octets total!
-    if ($heap->{streams}) {
+    if ($heap->{streaming}) {
       $request->[REQ_POSTBACK]->(
         $request->[REQ_RESPONSE], $request->[REQ_BUFFER]
       );
