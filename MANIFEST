@@ -1,7 +1,7 @@
 # $Id$
 CHANGES
+HTTP.pm
 MANIFEST
 Makefile.PL
-HTTP.pm
 README
 t/01_request.t
