@@ -645,6 +645,7 @@ sub poco_weeble_connect_error {
 
   my $request = delete $heap->{request}->{$request_id};
 
+  # Stop the timeout timer for this wheel, too.
   my $alarm_id = $request->[REQ_TIMER];
   if (delete $heap->{timer_to_request}->{ $alarm_id }) {
     $kernel->alarm_remove( $alarm_id );
@@ -709,6 +710,8 @@ sub poco_weeble_io_error {
 
   # Drop the wheel.
   my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
+  die "expected a request ID, but there is none" unless defined $request_id;
+
   my $request = delete $heap->{request}->{$request_id};
 
   # Stop the timeout timer for this wheel, too.
