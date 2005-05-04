@@ -10,8 +10,9 @@ use bytes; # for utf8 compatibility
 
 sub DEBUG         () { 1 }
 sub DEBUG_DATA    () { 0 }
-sub DEBUG_CHUNKED () { 0 }
+sub DEBUG_CHUNKED () { 1 }
 
+# keep-alive support enabled?
 sub K () { 1 }
 
 use vars qw($VERSION);
@@ -37,6 +38,7 @@ BEGIN {
 use POE qw(
   Wheel::SocketFactory Wheel::ReadWrite
   Driver::SysRW Filter::Stream
+  Filter::HTTPHead;
 );
 
 BEGIN {
@@ -561,6 +563,7 @@ sub poco_weeble_do_connect {
 
         DEBUG and warn "CON: Reusing socket (request ID = $request_id)\n";
         $socket_factory = $request->[REQ_WHEEL] = $heap->{address_to_wheel}->{$hostport};
+    	$request->[REQ_WHEEL]->set_input_filter (POE::Filter::HTTPHead->new);
         $keep_alive++;
 
     } else {
@@ -682,7 +685,8 @@ sub poco_weeble_connect_ok {
     my $new_wheel = POE::Wheel::ReadWrite->new(
       Handle       => $socket,
       Driver       => POE::Driver::SysRW->new(BlockSize => $block_size),
-      Filter       => POE::Filter::Stream->new(),
+      InputFilter  => POE::Filter::HTTPHead->new(),
+      OutputFilter => POE::Filter::Stream->new(),
       InputEvent   => 'got_socket_input',
       FlushedEvent => 'got_socket_flush',
       ErrorEvent   => 'got_socket_error',
@@ -866,6 +870,8 @@ sub poco_weeble_io_error {
 # in the other direction.
 # {{{ poco_weeble_io_read
 
+my $NL;
+
 sub poco_weeble_io_read {
     my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
     my $request_id = $heap->{wheel_to_request}->{$wheel_id};
@@ -880,138 +886,37 @@ sub poco_weeble_io_read {
     # Reset the timeout if we get data.
     $kernel->delay_adjust($request->[REQ_TIMER], $heap->{timeout});
 
-    # Aggregate the new input.
-    $request->[REQ_BUFFER] .= $input;
-
     # {{{ status line
 
     # The very first line ought to be status.  If it's not, then it's
     # part of the content.
     if ($request->[REQ_STATE] & RS_IN_STATUS) {
-        # Parse a status line. Detects the newline type, because it has to
-        # or bad servers will break it.  What happens if someone puts
-        # bogus headers in the content?
-        if (
-          $request->[REQ_BUFFER] =~
-          s/^(HTTP\/[\d\.]+)? *(\d+) *(.*?)([\x0D\x0A]+)([^\x0D\x0A])/$5/
-        ) {
-            DEBUG and
-              warn "I/O: wheel $wheel_id got a status line... moving to headers.\n";
-
-            my $protocol;
-            if (defined $1) {
-                $protocol = $1;
-            } else {
-                $protocol= 'HTTP/0.9';
-            }
-
-            DEBUG_DATA and
-              warn "wheel $wheel_id status: proto($protocol) code($2) msg($3)\n";
-
-            $request->[REQ_STATE]    = RS_IN_HEADERS;
-            $request->[REQ_NEWLINE]  = $4;
-            $request->[REQ_RESPONSE] = HTTP::Response->new(
-              $2,
-              $3 || status_message($2),
-            );
-            $request->[REQ_RESPONSE]->protocol( $protocol );
-            $request->[REQ_RESPONSE]->request( $request->[REQ_REQUEST] );
-        }
-
-        # No status line.  We go straight into content.  Since we don't
-        # know the status, we don't purport to.
-        elsif ($request->[REQ_BUFFER] =~ /[\x0D\x0A]+[^\x0D\x0A]/) {
-            DEBUG and warn "I/O: wheel $wheel_id got no status... moving to content.\n";
-            $request->[REQ_RESPONSE] = HTTP::Response->new();
-            $request->[REQ_STATE] = RS_IN_CONTENT;
-        }
-
-        # We need more data to match the status line.
-        else {
-            return;
-        }
+	my $filter = $request->[REQ_WHEEL]->get_input_filter;
+	warn "FILTER is $filter";
+	$NL = $request->[REQ_WHEEL]->get_input_filter->[0]->[0]->[1];
+	warn "NEWLINE is $NL";
+	if (defined $input) {
+	$input->request ($request->[REQ_REQUEST]);
+	warn "INPUT for ", $request->[REQ_REQUEST]->uri, " is \n",$input->as_string;
+	} else {
+	warn "NO INPUT\n";
+	}
+        $request->[REQ_RESPONSE] = $input;
+        $request->[REQ_STATE] = RS_CHK_REDIRECT;
+        $request->[REQ_FIRST_RESPONSE] = 1;
+    	$request->[REQ_WHEEL]->set_input_filter (POE::Filter::Stream->new);
+	return;
     }
 
     # }}} status line
-
-    my $NL = qr/$request->[REQ_NEWLINE]|\x0D?\x0A/;
-
-    # {{{ headers
-
-    # Parse the input for headers.  This isn't in an else clause because
-    # we may go from status to content in the same read.
-    if ($request->[REQ_STATE] & RS_IN_HEADERS) {
-        # Parse it by lines. -><- Assumes newlines are consistent with the
-        # status line.  I just know this is too much to ask.
-      HEADER:
-        while (
-          $request->[REQ_BUFFER] =~
-          s/^(.*?)($NL)//
-        ) {
-            # This line means something.
-            if (length $1) {
-                my $line = $1;
-
-                # New header.
-                if ($line =~ /^([\w\-]+)\s*\:\s*(.+)\s*$/) {
-                    DEBUG and warn "I/O: wheel $wheel_id got a new header: $1 ...\n";
-
-                    $request->[REQ_LAST_HEADER] = $1;
-                    $request->[REQ_RESPONSE]->push_header($1, $2);
-                }
-
-                # Continued header.
-                elsif ($line =~ /^\s+(.+?)\s*$/) {
-                    if (defined $request->[REQ_LAST_HEADER]) {
-                        DEBUG and
-                          warn(
-                            "I/O: wheel $wheel_id got a continuation for header ",
-                            $request->[REQ_LAST_HEADER],
-                            " ...\n"
-                          );
-
-                        $request->[REQ_RESPONSE]->push_header(
-                          $request->[REQ_LAST_HEADER], $1
-                        );
-                    } else {
-                        DEBUG and warn "I/O: wheel $wheel_id got continued status message...\n";
-
-                        my $message = $request->[REQ_RESPONSE]->message();
-                        $message .= " " . $1;
-                        $request->[REQ_RESPONSE]->message($message);
-                    }
-                }
-
-                # Dunno what.
-                else {
-                    # -><- bad request?
-                    DEBUG and warn "I/O: wheel $wheel_id got strange header line: <$line>";
-                }
-            }
-
-            # This line is empty; we eat it and switch to RS_CHK_REDIRECT.
-            else {
-                DEBUG and
-                  warn(
-                    "I/O: wheel $wheel_id got a blank line... ".
-                    "headers done, check for redirection.\n"
-                  );
-                $request->[REQ_STATE] = RS_CHK_REDIRECT;
-                last HEADER;
-            }
-        }
-
-        # XXX this is for chunked responses to know when they start
-        $request->[REQ_FIRST_RESPONSE] = 1;
-
-    }
-
-    # }}} headers
     # {{{ redirect
-
+    
     # Edge case between RS_IN_HEADERS and RS_IN_CONTENT.  We'll see if
     # HTML header parsing is necessary (and enable it if it is).  We'll
     # also check for redirection, if enabled.
+
+    # Aggregate the new input.
+    $request->[REQ_BUFFER] .= $input;
 
     if ($request->[REQ_STATE] & RS_CHK_REDIRECT) {
         # We only go through this once per request.
@@ -1184,7 +1089,7 @@ sub poco_weeble_io_read {
                 #   $chunked > 0:    bytes left in current chunk to read
 
                 DEBUG_CHUNKED and warn "I/O: reading chunks (chunked = $chunked)\n";
-                # warn [ "BUFFER, BEFORE: ", $request->[REQ_BUFFER], length $request->[REQ_BUFFER] ];
+                DEBUG_CHUNKED and warn "BUFFER, BEFORE: ", $request->[REQ_BUFFER], length $request->[REQ_BUFFER];
                 DEBUG_CHUNKED and warn "I/O: buffer_length = ", length($request->[REQ_BUFFER]), "\n";
 
                 my $line;
@@ -1208,7 +1113,7 @@ sub poco_weeble_io_read {
 
 			DEBUG_CHUNKED and warn $original_buffer
 			  if !defined($line) || $line ne "";
-			die "I/O: Missing newline after chunk data: '$line'"
+			warn "I/O: Missing newline after chunk data: '$line'"
 			  if !defined($line) || $line ne "";
 
 			# $line = my_readline($self);
@@ -1230,6 +1135,7 @@ sub poco_weeble_io_read {
 
 		    my $chunk_len = $line;
 		    $chunk_len =~ s/;.*//; # ignore potential chunk parameters
+		    warn "reported chunk len is $chunk_len";
 		    unless ($chunk_len =~ /^([\da-fA-F]+)\s*$/) {
 			DEBUG_CHUNKED and warn(
 					       "I/O: original = $original_buffer\n",
@@ -1446,6 +1352,7 @@ sub poco_weeble_io_read {
         # We've gone over the maximum content size to return.  Chop it
         # back.
         if ($heap->{max_size} and $request->[REQ_OCTETS_GOT] > $heap->{max_size}) {
+	    warn "GOT MORE THAN MAX_SIZE BYTES";
             my $over = $request->[REQ_OCTETS_GOT] - $heap->{max_size};
             $request->[REQ_OCTETS_GOT] -= $over;
             substr($request->[REQ_BUFFER], -$over) = "";

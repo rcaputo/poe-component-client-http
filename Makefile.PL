@@ -36,6 +36,8 @@ WriteMakefile
     VERSION_FROM => 'HTTP.pm',
     PM           => { 'HTTP.pm'        => '$(INST_LIBDIR)/HTTP.pm',
                       'SSL.pm'         => '$(INST_LIBDIR)/HTTP/SSL.pm',
+                      'HTTPHead.pm'    => '$(INST_LIBDIR)/../../Filter/HTTPHead.pm',
+                      'HTTPChunk.pm'   => '$(INST_LIBDIR)/../../Filter/HTTPChunk.pm',
                     },
     PREREQ_PM    => \%prereq,
     dist         =>
