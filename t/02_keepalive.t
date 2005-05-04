@@ -14,169 +14,172 @@ sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
 $| = 1;
 
 my @test_results = (
-		    'not ok 1', 'not ok 2', 'not ok 3', 'not ok 4', 'not ok 5',
-		    'not ok 6', 'not ok 7', # 'not ok 8', 'not ok 9',
+	    'not ok 1', 'not ok 2', 'not ok 3', 'not ok 4', 'not ok 5',
+	    'not ok 6', 'not ok 7', # 'not ok 8', 'not ok 9',
 );
 
 print "1..", scalar @test_results, "\n";
 
 sub client_start {
-  my ($kernel, $heap) = @_[KERNEL, HEAP];
+my ($kernel, $heap) = @_[KERNEL, HEAP];
 
-  DEBUG and warn "client starting...\n";
+DEBUG and warn "client starting...\n";
 
-  $kernel->post( weeble => request => got_first_response =>
-                 # GET 'http://poe.perl.org/misc/test.html'
-		 GET 'http://devel.exitexchange.com/~rob/test.html', Connection => "Keep-Alive",
-               ) if 1;
+$kernel->post( weeble => request => got_first_response =>
+	 # GET 'http://poe.perl.org/misc/test.html'
+	 GET 'http://devel.exitexchange.com/~rob/test.html', Connection => "Keep-Alive",
+       ) if 1;
 
-  $heap->{ka_count} = 5;
+$heap->{ka_count} = 5;
 
-  $kernel->post( chunk => request => got_response =>
-                 # GET 'http://poe.perl.org/misc/test.html'
+$kernel->post( chunk => request => got_response =>
+	 # GET 'http://poe.perl.org/misc/test.html'
 
-		 # one packet, multiple chunks
-		 # GET 'http://www.searchrequest.net/'
+	 # one packet, multiple chunks
+	 # GET 'http://www.searchrequest.net/'
 
-		 # BIG chunked response
-		 # GET 'http://www.dack.com/'
+	 # BIG chunked response
+	 # GET 'http://www.dack.com/'
 
-		 # CHUNKED WITH REDIRECT
-		 GET 'http://www.overture.com/', Connection => 'close'
+	 # CHUNKED WITH REDIRECT
+	 GET 'http://www.overture.com/', Connection => 'close'
 
-		 # CHUNKED W/O REDIRECT
-		 # GET 'http://www.content.overture.com/d/', Connection => 'close'
+	 # CHUNKED W/O REDIRECT
+	 # GET 'http://www.content.overture.com/d/', Connection => 'close'
 
-		 # ONLY redirect
-		 # GET 'http://devel.exitexchange.com/scripts/poe_redir'
-               ) if 1;
+	 # ONLY redirect
+	 # GET 'http://devel.exitexchange.com/scripts/poe_redir'
+       ) if 1;
 
-  # $kernel->yield('check_counts', 2, 2);
+# $kernel->yield('check_counts', 2, 2);
 
 }
 
 sub client_check_counts {
-    my ($kernel, $test_number, $expected_count) = @_[KERNEL, ARG0, ARG1];
-    # a better test would be to also keep track of the responses we are
-    # receiving and checking that pending_requests_count decrements properly.
-    my $count = $kernel->call( weeble => 'pending_requests_count' );
-    $test_results[$test_number-1] = "ok $test_number"
-      if $expected_count == $count;
+my ($kernel, $test_number, $expected_count) = @_[KERNEL, ARG0, ARG1];
+# a better test would be to also keep track of the responses we are
+# receiving and checking that pending_requests_count decrements properly.
+my $count = $kernel->call( weeble => 'pending_requests_count' );
+$test_results[$test_number-1] = "ok $test_number"
+if $expected_count == $count;
 }
 
 sub client_stop {
-    DEBUG and warn "client stopped...\n";
-    foreach (@test_results) {
-	print "$_\n";
-    }
+DEBUG and warn "client stopped...\n";
+foreach (@test_results) {
+print "$_\n";
+}
 }
 
 sub client_got_first_response {
-    my ($heap, $kernel, $request_packet, $response_packet) = @_[HEAP, KERNEL, ARG0, ARG1];
-    my $http_request  = $request_packet->[0];
-    my $http_response = $response_packet->[0];
+my ($heap, $kernel, $request_packet, $response_packet) = @_[HEAP, KERNEL, ARG0, ARG1];
+my $http_request  = $request_packet->[0];
+my $http_response = $response_packet->[0];
 
-    # DEBUG and "client FIRST_RESPONSE: START";
+# DEBUG and "client FIRST_RESPONSE: START";
 
-    DEBUG and do {
-	warn "client got request...\n";
+DEBUG and do {
+warn "client got request...\n";
 
-	my $response_string = $http_response->as_string();
-	$response_string =~ s/^/| /mg;
+my $response_string = $http_response->as_string();
+$response_string =~ s/^/| /mg;
 
-	warn ",", '-' x 78, "\n";
-	warn $response_string;
-	warn "`", '-' x 78, "\n";
-    };
+warn ",", '-' x 78, "\n";
+warn $response_string;
+warn "`", '-' x 78, "\n";
+};
 
-    my $request_path = $http_request->uri->path . ''; # stringify
+my $request_path = $http_request->uri->path . ''; # stringify
 
-    if (defined $http_response->code) {
-	my $response_string = $http_response->as_string();
-	if ($http_response->code == 200) {
-	    $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
+if (defined $http_response->code) {
+my $response_string = $http_response->as_string();
+if ($http_response->code == 200) {
+    $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
 
-	    $kernel->post( weeble => request => got_response =>
-			   GET 'http://devel.exitexchange.com/~rob/test1.html', Connection => "Keep-Alive"
-			 ) if $request_path =~ /\/test\.html$/ and $heap->{ka_count}--;
+    $kernel->post( weeble => request => got_response =>
+		   GET 'http://devel.exitexchange.com/~rob/test1.html', Connection => "Keep-Alive"
+		 ) if $request_path =~ /\/test\.html$/ and $heap->{ka_count}--;
 
-	}
-    }
+}
+}
 
-    # DEBUG and "client FIRST_RESPONSE: DONE";
+# DEBUG and "client FIRST_RESPONSE: DONE";
 
 }
 
 sub client_got_response {
-    my ($heap, $kernel, $request_packet, $response_packet) = @_[HEAP, KERNEL, ARG0, ARG1];
-    my $http_request  = $request_packet->[0];
-    my $http_response = $response_packet->[0];
+my ($heap, $kernel, $request_packet, $response_packet) = @_[HEAP, KERNEL, ARG0, ARG1];
+my $http_request  = $request_packet->[0];
+my $http_response = $response_packet->[0];
 
-    # DEBUG and "client SECOND_RESPONSE: START";
+# DEBUG and "client SECOND_RESPONSE: START";
 
-    DEBUG and do {
-	warn "client got request...\n";
+DEBUG and do {
+warn "client got request...\n";
 
-	my $response_string = $http_response->as_string();
-	$response_string =~ s/^/| /mg;
+my $response_string = $http_response->as_string();
+$response_string =~ s/^/| /mg;
 
-	warn ",", '-' x 78, "\n";
-	warn $response_string;
-	warn "`", '-' x 78, "\n";
-    };
+warn ",", '-' x 78, "\n";
+warn $response_string;
+warn "`", '-' x 78, "\n";
+};
 
-    my $request_path = $http_request->uri->path . ''; # stringify
+my $request_path = $http_request->uri->path . ''; # stringify
 
-    if (defined $http_response->code) {
-	my $response_string = $http_response->as_string();
-	if ($http_response->code == 200) {
-	    $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
+if (defined $http_response->code) {
+my $response_string = $http_response->as_string();
+if ($http_response->code == 200) {
+    $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
 
-	    $kernel->post( weeble => request => got_response =>
-			   GET 'http://devel.exitexchange.com/~rob/test2.html', Connection => "Keep-Alive",
-			 ) if $request_path =~ /\/test1\.html$/ and $heap->{ka_count}--;
+    $kernel->post( weeble => request => got_response =>
+		   GET 'http://devel.exitexchange.com/~rob/test2.html', Connection => "Keep-Alive",
+		 ) if $request_path =~ /\/test1\.html$/ and $heap->{ka_count}--;
 
-	    $test_results[1] = 'ok 2' if $response_string =~ /TEST1/;
-	    $test_results[2] = 'ok 3' if $response_string =~ /TEST2/;
+    $test_results[1] = 'ok 2' if $response_string =~ /TEST1/;
+    $test_results[2] = 'ok 3' if $response_string =~ /TEST2/;
 
-	    $kernel->post( weeble => request => got_response =>
-			   GET 'http://devel.exitexchange.com/~rob/test3.html',
-			 ) if $response_string =~ /TEST2/ and $heap->{ka_count}--;
+    $kernel->post( weeble => request => got_response =>
+		   GET 'http://devel.exitexchange.com/~rob/test3.html',
+		 ) if $response_string =~ /TEST2/ and $heap->{ka_count}--;
 
-	    $test_results[3] = 'ok 4' if $response_string =~ /TEST3/;
-	    $kernel->post( weeble => request => got_response =>
-			   GET 'http://devel.exitexchange.com/~rob/test4.html', Connection => "Close"
-			 ) if $response_string =~ /TEST3/;
+    $test_results[3] = 'ok 4' if $response_string =~ /TEST3/;
+    $kernel->post( weeble => request => got_response =>
+		   GET 'http://devel.exitexchange.com/~rob/test4.html', Connection => "Close"
+		 ) if $response_string =~ /TEST3/;
 
-	    $test_results[4] = 'ok 5' if $response_string =~ /TEST4/;
+    $test_results[4] = 'ok 5' if $response_string =~ /TEST4/;
 
 
-	    $kernel->post( chunk => request => got_response =>
-			   # GET 'http://poe.perl.org/misc/test.html'
-			   # GET 'http://www.searchrequest.net/'
-			   # GET 'http://www.dack.com/'
-			   GET 'http://exit-val.looksmart.com/r_search?isp=exi&key=cats', Connection => 'close'
-			 ) if $http_request->uri =~ /dogs$/;
+    $kernel->post( chunk => request => got_response =>
+		   GET 'http://exit-val.looksmart.com/r_search?isp=exi&key=dogs', Connection => 'close')
+    if $response_string =~ /TEST4/;
+    $kernel->post( chunk => request => got_response =>
+		   # GET 'http://poe.perl.org/misc/test.html'
+		   # GET 'http://www.searchrequest.net/'
+		   # GET 'http://www.dack.com/'
+		   GET 'http://exit-val.looksmart.com/r_search?isp=exi&key=cats', Connection => 'close'
+		 ) if $http_request->uri =~ /dogs$/;
 
-	    $test_results[5] = 'ok 6' if $http_request->uri =~ /dogs$/;
+    $test_results[5] = 'ok 6' if $http_request->uri =~ /dogs$/;
 
-	    $test_results[6] = 'ok 7' if $http_request->uri =~ /cats$/;
+    $test_results[6] = 'ok 7' if $http_request->uri =~ /cats$/;
 
-	    $kernel->post( chunk => request => got_response =>
-			   # GET 'http://poe.perl.org/misc/test.html'
-			   # GET 'http://www.searchrequest.net/'
-			   # GET 'http://www.dack.com/'
-			   GET 'http://www.overture.com/images-affiliates/befree/ologo.gif', Connection => 'close'
-			 ) if 0 and $http_request->uri =~ /cats$/;
+    $kernel->post( chunk => request => got_response =>
+		   # GET 'http://poe.perl.org/misc/test.html'
+		   # GET 'http://www.searchrequest.net/'
+		   # GET 'http://www.dack.com/'
+		   GET 'http://www.overture.com/images-affiliates/befree/ologo.gif', Connection => 'close'
+		 ) if 0 and $http_request->uri =~ /cats$/;
 
-	} elsif ($http_response->code == 404) {
-	    $request_path;
-	    $test_results[7] = 'ok 8' if $request_path =~ /ologo\.gif$/;
+} elsif ($http_response->code == 404) {
+    $request_path;
+    $test_results[7] = 'ok 8' if $request_path =~ /ologo\.gif$/;
 
-	}
-    }
+}
+}
 
-    # DEBUG and "client SECOND_RESPONSE: DONE";
+# DEBUG and "client SECOND_RESPONSE: DONE";
 }
 
 #------------------------------------------------------------------------------

@@ -11,6 +11,7 @@ sub CURRENT_STATE    () { 1 }
 sub CHUNK_SIZE       () { 2 }
 sub CHUNK_BUFFER     () { 3 }
 sub TRAILER_RESPONSE () { 4 }
+sub RESPONSE_SIZE    () { 5 }
 
 sub STATE_SIZE () { 0x00 }  # waiting for a status line
 sub STATE_DATA () { 0x02 }  # gotten status, looking for header or end
@@ -55,60 +56,87 @@ my $chunk_extension = qr/(?:;$chunk_ext_name(?:$chunk_ext_val)?)/o;
 sub get_one_start {
   my ($self, $chunks) = @_;
 
+  #warn "GOT MORE DATA";
   push (@{$self->[FRAMING_BUFFER]}, @$chunks);
+    #warn "NUMBER OF CHUNKS is now ", scalar @{$self->[FRAMING_BUFFER]};
 }
 
 sub get_one {
   my $self = shift;
 
+  my $retval = [];
   while (defined (my $chunk = shift (@{$self->[FRAMING_BUFFER]}))) {
+    #warn "CHUNK IS SIZE ", length($chunk);
+    #warn join (",", map {sprintf("%02X", ord($_))} split (//, substr ($chunk, 0, 10))), "\n";
+    #warn "NUMBER OF CHUNKS is ", scalar @{$self->[FRAMING_BUFFER]};
+    #warn "STATE is ", $self->[CURRENT_STATE];
     if ($self->[CURRENT_STATE] == STATE_SIZE) {
-      if ($chunk !~ /.\n/s) {
+      #warn "FINDING CHUNK LENGTH";
+      if ($chunk !~ /.\015?\012/s) {
+	#warn "SPECIAL CASE";
 	if (@{$self->[FRAMING_BUFFER]} == 0) {
+	  #warn "pushing $chunk back";
       	  unshift (@{$self->[FRAMING_BUFFER]}, $chunk);
-	  return [];
+	  return $retval;
 	} else {
 	  $chunk .= shift (@{$self->[FRAMING_BUFFER]});
+	  #warn "added to $chunk";
 	}
       }
-      if ($chunk =~ s/($HEX+)(?:;.*)?\n//s) {
+      if ($chunk =~ s/^($HEX+)(?:;.*)?\015?\012//s) {
 	my $length = hex($1);
+	#warn "GOT CHUNK OF LENGTH $length";
 	$self->[CHUNK_SIZE] = $length;
+	$self->[RESPONSE_SIZE] += $length;
 	if ($length == 0) {
 	  $self->[CURRENT_STATE] = STATE_TRAILER;
 	} else {
 	  $self->[CURRENT_STATE] = STATE_DATA;
 	}
       } else {
-	return [];
+	#warn "DIDN'T FIND CHUNK LENGTH";
+	return $retval;
       }
     }
     if ($self->[CURRENT_STATE] == STATE_DATA) {
       my $len = $self->[CHUNK_SIZE] - length ($self->[CHUNK_BUFFER]);
+      #warn "going for length ", $self->[CHUNK_SIZE], " (need $len more)";
       my $newchunk = delete $self->[CHUNK_BUFFER];
       $newchunk .= substr ($chunk, 0, $len, '');
+      #warn "got " . length($newchunk) . " bytes of data";
       if (length $newchunk != $self->[CHUNK_SIZE]) {
 	#smaller, so wait
 	$self->[CHUNK_BUFFER] = $newchunk;
 	next;
       }
       $self->[CURRENT_STATE] = STATE_SIZE;
+      #warn "BACK TO FINDING CHUNK SIZE $chunk";
       if (length ($chunk) > 0) {
-	$chunk =~ s/^\n//s;
+	#warn "we still have a bit";
+	#warn "'", substr ($chunk, 0, 10), "'";
+	$chunk =~ s/^\015?\012//s;
+	#warn "'", substr ($chunk, 0, 10), "'";
 	unshift (@{$self->[FRAMING_BUFFER]}, $chunk);
       }
-      return [$newchunk];
+      push @$retval, $newchunk;
+      #return [$newchunk];
     }
     if ($self->[CURRENT_STATE] == STATE_TRAILER) {
-      if ($chunk =~ /\n/s) {
-	return [];
+      if ($chunk =~ /^\015?\012/s) {
+	#warn "SETTING CONTENT LENGTH";
+	#$self->[TRAILER_RESPONSE]->header ('Content-Length',
+					   #$self->[RESPONSE_SIZE]);
+	my $response = delete $self->[TRAILER_RESPONSE];
+	push (@$retval, $response);
+	#warn "returning ", scalar @$retval, "responses";
+	return $retval;
       }
-      if ($chunk =~ s/([-\w]+):\s*(?:.*?)\n//s) {
+      if ($chunk =~ s/([-\w]+):\s*(?:.*?)\015?\012//s) {
 	$self->[TRAILER_RESPONSE]->header ($1, $2);
       }
     }
   }
-  return [];
+  return $retval;
 }
 
 sub put {

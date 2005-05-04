@@ -32,13 +32,17 @@ sub get_one_start {
   my ($self, $chunks) = @_;
 
   push (@{$self->[FRAMING_BUFFER]}, @$chunks);
+  #warn "now got ", scalar @{$self->[FRAMING_BUFFER]}, " lines";
 }
 
 sub get_one {
   my $self = shift;
 
+  #warn "in get_one";
   while (defined (my $line = shift (@{$self->[FRAMING_BUFFER]}))) {
+      #warn "LINE $line";
       if ($self->[CURRENT_STATE] == STATE_STATUS) {
+	 #warn "in status";
 	 #expect a status line
 	 if ($line =~ m|^(?:HTTP/(\d+\.\d+) )?(\d{3})(?: (.+))?$|) {
 	    $self->[PROTOCOL_VERSION] = $1
@@ -50,21 +54,25 @@ sub get_one {
 	    #return [HTTP::Response->new ('500', 'Bad Response')];
 	 }
       } else {
+	 if ($line eq '') {
+	    $self->[CURRENT_STATE] = STATE_STATUS;
+	    #warn "return response";
+	    return [$self->[WORK_RESPONSE]];
+	 }
+	 #warn "in headers";
 	 unless (@{$self->[FRAMING_BUFFER]} > 0) {
 	    unshift (@{$self->[FRAMING_BUFFER]}, $line);
 	    return [];
 	 }
+	 #warn "got more lines";
 	 while ($self->[FRAMING_BUFFER]->[0] =~ /^[\t ]/) {
 	    my $next_line = shift (@{$self->[FRAMING_BUFFER]});
 	    $next_line =~ s/^[\t ]+//;
 	    $line .= $next_line;
 	 }
+	 #warn "unfolded one: $line";
 	 if ($line =~ /^([^\x00-\x19()<>@,;:\\"\/\[\]\?={} \t]+):\s*([^\x00-\x07\x09-\x19]+)$/) {
 	    $self->[WORK_RESPONSE]->header($1, $2)
-	 }
-	 if ($line eq '') {
-	    $self->[CURRENT_STATE] = STATE_STATUS;
-	    return [$self->[WORK_RESPONSE]];
 	 }
       }
   }
@@ -112,7 +120,8 @@ sub get_pending {
   my $self = shift;
 
   my @pending = map {"$_\n"} @{$self->[0]->[1]->get_pending};
-  push (@pending, @{$self->[0]->[0]->get_pending});
+  my $lines = $self->[0]->[0]->get_pending;
+  push (@pending, @$lines) if (defined $lines);
 
   return \@pending;
 }

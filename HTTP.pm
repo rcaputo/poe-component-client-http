@@ -1,16 +1,12 @@
-# $Id: HTTP.pm,v 1.56 2004/07/13 18:02:37 rcaputo Exp $
-# License and documentation are after __END__.
-
 package POE::Component::Client::HTTP;
 
 # {{{ INIT
 
 use strict;
-use bytes; # for utf8 compatibility
+#use bytes; # for utf8 compatibility
 
 sub DEBUG         () { 1 }
 sub DEBUG_DATA    () { 0 }
-sub DEBUG_CHUNKED () { 1 }
 
 # keep-alive support enabled?
 sub K () { 1 }
@@ -25,6 +21,9 @@ use HTTP::Response;
 use HTTP::Status qw(status_message);
 use URI;
 use HTML::HeadParser;
+
+use POE::Component::Client::HTTP::RequestFactory;
+use POE::Component::Client::HTTP::Request qw(:states :fields);
 
 # Allow more finely grained timeouts if Time::HiRes is available.
 BEGIN {
@@ -41,48 +40,6 @@ use POE qw(
   Filter::HTTPHead Filter::HTTPChunk
   Component::Client::DNS
 );
-
-# {{{ Constants
-
-sub REQ_POSTBACK      () {  0 }
-sub REQ_WHEEL         () {  1 }
-sub REQ_REQUEST       () {  2 }
-sub REQ_STATE         () {  3 }
-sub REQ_RESPONSE      () {  4 }
-sub REQ_BUFFER        () {  5 }
-sub REQ_LAST_HEADER   () {  6 }
-sub REQ_OCTETS_GOT    () {  7 }
-sub REQ_NEWLINE       () {  8 }
-sub REQ_TIMER         () {  9 }
-sub REQ_PROG_POSTBACK () { 10 }
-sub REQ_USING_PROXY   () { 11 }
-sub REQ_HOST          () { 12 }
-sub REQ_PORT          () { 13 }
-sub REQ_START_TIME    () { 14 }
-sub REQ_HEAD_PARSER   () { 15 }
-
-sub RS_CONNECT      () { 0x01 }
-sub RS_SENDING      () { 0x02 }
-sub RS_IN_STATUS    () { 0x04 }
-sub RS_IN_HEADERS   () { 0x08 }
-sub RS_CHK_REDIRECT () { 0x10 }
-sub RS_IN_CONTENT   () { 0x20 }
-sub RS_DONE         () { 0x40 }
-sub RS_POSTED       () { 0x80 }
-
-sub PROXY_HOST () { 0 }
-sub PROXY_PORT () { 1 }
-
-sub TRUE  () { 1 }
-sub FALSE () { 0 }
-
-sub DEFAULT_BLOCK_SIZE () { 4096 }
-
-# }}} Constants
-
-# Unique request ID, independent of wheel and timer IDs.
-
-my $request_seq = 0;
 
 # {{{ Bring in HTTPS support.
 
@@ -129,66 +86,7 @@ sub spawn {
       Timeout => $timeout,
     );
 
-  # Accept an agent, or a reference to a list of agents.
-  my $agent = delete $params{Agent};
-  $agent = [] unless defined $agent;
-  if (ref($agent) eq "") {
-    $agent = [ $agent ];
-  }
-  unless (ref($agent) eq "ARRAY") {
-    croak "Agent must be a scalar or a reference to a list of agent strings";
-  }
-
-  push(
-    @$agent,
-    sprintf(
-      'POE-Component-Client-HTTP/%s (perl; N; POE; en; rv:%f)',
-      $VERSION, $VERSION
-    )
-  ) unless @$agent;
-
-  my $max_size = delete $params{MaxSize};
-
-  my $streaming = delete $params{Streaming};
-
-  my $protocol = delete $params{Protocol};
-  $protocol = 'HTTP/1.0' unless defined $protocol and length $protocol;
-
-  my $cookie_jar    = delete $params{CookieJar};
-  my $from          = delete $params{From};
-  my $no_proxy      = delete $params{NoProxy};
-  my $proxy         = delete $params{Proxy};
-  my $max_redirects = delete $params{FollowRedirects};
-
-  # Process HTTP_PROXY and NO_PROXY environment variables.
-
-  $proxy    = $ENV{HTTP_PROXY} || $ENV{http_proxy} unless defined $proxy;
-  $no_proxy = $ENV{NO_PROXY}   || $ENV{no_proxy}   unless defined $no_proxy;
-
-  # Translate environment variable formats into internal versions.
-
-  if (defined $proxy) {
-    if (ref($proxy) eq 'ARRAY') {
-      croak "Proxy must contain [HOST,PORT]" unless @$proxy == 2;
-      $proxy = [ $proxy ];
-    }
-    else {
-      my @proxies = split /\s*\,\s*/, $proxy;
-      foreach (@proxies) {
-        s/^http:\/+//;
-        s/\/+$//;
-        croak "Proxy must contain host:port" unless /^(.+):(\d+)$/;
-        $_ = [ $1, $2 ];
-      }
-      $proxy = \@proxies;
-    }
-  }
-
-  if (defined $no_proxy) {
-    unless (ref($no_proxy) eq 'ARRAY') {
-      $no_proxy = [ split(/\s*\,\s*/, $no_proxy) ];
-    }
-  }
+  my $request_factory = POE::Component::Client::HTTP::RequestFactory->new (\%params);
 
   croak(
     "$type doesn't know these parameters: ",
@@ -223,15 +121,7 @@ sub spawn {
     heap => {
       alias         => $alias,
       timeout       => $timeout,
-      cookie_jar    => $cookie_jar,
-      proxy         => $proxy,
-      no_proxy      => $no_proxy,
-      max_redirects => $max_redirects,
-      agent         => $agent,
-      from          => $from,
-      protocol      => $protocol,
-      max_size      => $max_size,
-      streaming     => $streaming,
+      factory	    => $request_factory,
     },
   );
 
@@ -244,25 +134,6 @@ sub spawn {
 
 sub poco_weeble_start {
   my ($kernel, $heap) = @_[KERNEL, HEAP];
-
-  DEBUG and do {
-    sub no_undef { (defined $_[0]) ? $_[0] : "(undef)" };
-    sub no_undef_list { (defined $_[0]) ? "@{$_[0]}" : "(undef)" };
-    warn(
-      ",--- starting a http client component ----\n",
-      "| alias     : $heap->{alias}\n",
-      "| timeout   : $heap->{timeout}\n",
-      "| agent     : ", no_undef_list($heap->{agent}), "\n",
-      "| protocol  : $heap->{protocol}\n",
-      "| max_size  : ", no_undef($heap->{max_size}), "\n",
-      "| streaming : ", no_undef($heap->{streaming}), "\n",
-      "| cookie_jar: ", no_undef($heap->{cookie_jar}), "\n",
-      "| from      : ", no_undef($heap->{from}), "\n",
-      "| proxy     : ", no_undef_list($heap->{proxy}), "\n",
-      "| no_proxy  : ", no_undef_list($heap->{no_proxy}), "\n",
-      "`-----------------------------------------\n",
-    );
-  };
 
   $kernel->alias_set($heap->{alias});
 }
@@ -296,143 +167,10 @@ sub poco_weeble_request {
     $response_event, $http_request, $tag, $progress_event
   ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1, ARG2, ARG3];
 
-  # Add a protocol if one isn't included.
-  $http_request->protocol( $heap->{protocol} )
-    unless (
-      defined $http_request->protocol()
-      and length $http_request->protocol()
+
+  my $request = $heap->{factory}->create_request (
+      $http_request, $response_event, $tag, $progress_event, $sender
     );
-
-
-  # MEXNIX 2002-06-01: If we have a proxy set, and the request URI is
-  # not in our no_proxy, then use the proxy.  Otherwise use the
-  # request URI.
-
-  # Get the host and port from the request object.
-  my ($host, $port, $scheme, $using_proxy);
-
-  eval {
-    $host   = $http_request->uri()->host();
-    $port   = $http_request->uri()->port();
-    $scheme = $http_request->uri()->scheme();
-  };
-  if ($@) {
-    warn $@;
-    return;
-  }
-
-  # Add a host header if one isn't included.  Must do this before
-  # we reset the $host for the proxy!
-  unless (
-    defined $http_request->header('Host')
-    and length $http_request->header('Host')
-  ) {
-    # Only include the port if it's nonstandard.
-    # TODO - Should we check for SSL ports here?
-    if ($port == 80) {
-      $http_request->header( Host => $host );
-    } else {
-      $http_request->header( Host => "$host:$port" )
-    }
-  }
-
-  # This request qualifies for proxying.  Replace the host and port
-  # with the proxy's host and port.  This comes after the Host:
-  # header is set, so it doesn't break the request object.
-
-  if (defined $heap->{proxy} and not _in_no_proxy($host, $heap->{no_proxy})) {
-    my $proxy = $heap->{proxy}->[rand @{$heap->{proxy}}];
-    $host = $proxy->[PROXY_HOST];
-    $port = $proxy->[PROXY_PORT];
-    $using_proxy = TRUE;
-  } else {
-    $using_proxy = FALSE;
-  }
-
-  # Add the User-Agent: header if one isn't included.
-  unless (defined $http_request->user_agent()) {
-    if (@{$heap->{agent}}) {
-      my $this_agent = $heap->{agent}->[rand @{$heap->{agent}}];
-      $http_request->user_agent($this_agent);
-    }
-  }
-
-  # Add a From: header if one isn't included.
-  if (defined $heap->{from} and length $heap->{from}) {
-    my $req_from = $http_request->from();
-    unless (defined $req_from and length $req_from) {
-      $http_request->from( $heap->{from} );
-    }
-  }
-
-  # Create a progress postback if requested.
-
-  my $progress_postback;
-  if (defined $progress_event) {
-    $progress_postback = $sender->postback($progress_event, $http_request, $tag);
-  }
-
-  # If we have a cookie jar, have it add the appropriate headers.
-  # LWP rocks!
-
-  if (defined $heap->{cookie_jar}) {
-    $heap->{cookie_jar}->add_cookie_header($http_request);
-  }
-
-  # Get a unique request ID.
-
-  my $request_id = ++$request_seq;
-
-  DEBUG and warn "REQ: weeble got a request ($request_id)...\n";
-
-  # Build the request.
-  my $request = [
-    $sender->postback( $response_event, $http_request, $tag ), # REQ_POSTBACK
-    undef,              # REQ_WHEEL
-    $http_request,      # REQ_REQUEST
-    RS_CONNECT,         # REQ_STATE
-    undef,              # REQ_RESPONSE
-    '',                 # REQ_BUFFER
-    undef,              # REQ_LAST_HEADER
-    0,                  # REQ_OCTETS_GOT
-    "\x0D\x0A",         # REQ_NEWLINE
-    undef,              # REQ_TIMER
-    $progress_postback, # REQ_PROG_POSTBACK
-    $using_proxy,       # REQ_USING_PROXY
-    $host,              # REQ_HOST
-    $port,              # REQ_PORT
-    time(),             # REQ_START_TIME
-    undef,              # REQ_HEAD_PARSER
-   ];
-
-  if ($heap->{max_redirects}) { # redirect
-      my $uri = $http_request->uri()->as_string();
-      if (defined $tag && $tag =~ s/_redir_//) {
-          $request->[REQ_POSTBACK] = $heap->{request}->{$tag}->[REQ_POSTBACK];
-          $heap->{redir}->{$request_id}->{from} = $tag;
-          @{$heap->{redir}->{$request_id}->{hist}} =
-            @{$heap->{redir}->{$tag}->{hist}};
-
-          # delete OLD timeout
-
-          if (exists $heap->{redir}->{$tag}->{timeout}) {
-              # grab the OLD timeout, for the previous, redirected request
-              my $alarm_id = $heap->{redir}->{$tag}->{timeout};
-
-              DEBUG and warn "RED: Removing old timeout $alarm_id\n";
-
-              # NUKE IT
-              if (delete $heap->{timer_to_request}->{$alarm_id}) {
-                  $kernel->alarm_remove( $alarm_id );
-              }
-
-              # and don't follow it again
-              delete $heap->{redir}->{$tag}->{timeout};
-          }
-      }
-
-      push @{$heap->{redir}->{$request_id}->{hist}}, $uri;
-  }
 
   # Bail out if no SSL and we need it.
   if ($http_request->uri->scheme() eq 'https') {
@@ -442,18 +180,21 @@ sub poco_weeble_request {
       }
   }
 
+  my $host = $http_request->uri->host;
+  my $port = $http_request->uri->port;
+
   # -><- Should probably check for IPv6 addresses here, too.
   if ($host !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) {
 
       if (exists $heap->{resolve}->{$host}) {
           DEBUG and warn "DNS: $host is piggybacking on a pending lookup.\n";
-          push @{$heap->{resolve}->{$host}}, $request_id;
+          push @{$heap->{resolve}->{$host}}, $request->ID;
       } elsif (exists $heap->{address_to_wheel}->{"$host:$port"}) {
           DEBUG and warn "DNS: reusing existing connection for $host.\n";
-          $kernel->yield( do_connect => $request_id, $host );
+          $kernel->yield( do_connect => $request->ID, $host );
       } else {
           DEBUG and warn "DNS: $host is being looked up in the background.\n";
-          $heap->{resolve}->{$host} = [ $request_id ];
+          $heap->{resolve}->{$host} = [ $request->ID ];
           my $my_alias = $heap->{alias};
           $kernel->post(
             "poco_${my_alias}_resolver" =>
@@ -462,10 +203,10 @@ sub poco_weeble_request {
       }
   } else {
       DEBUG and warn "DNS: $host may block while it's looked up.\n";
-      $kernel->yield( do_connect => $request_id, $host );
+      $kernel->yield( do_connect => $request->ID, $host );
   }
 
-  $heap->{request}->{$request_id} = $request;
+  $heap->{request}->{$request->ID} = $request;
 }
 
 # }}} poco_weeble_request
@@ -489,7 +230,7 @@ sub poco_weeble_dns_answer {
   # No response.
   unless (defined $response_object) {
     foreach my $request_id (@$requests) {
-      warn "I/O: removing request $request_id";
+      DEBUG and warn "I/O: removing request $request_id";
       my $request = delete $heap->{request}->{$request_id};
       _post_error($request, $response_error);
     }
@@ -513,7 +254,7 @@ sub poco_weeble_dns_answer {
 
   # Didn't return here.  No address record for the host?
   foreach my $request_id (@$requests) {
-    warn "I/O: removing request $request_id";
+    DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
     _post_error($request, "Host has no address.");
   }
@@ -539,8 +280,10 @@ sub poco_weeble_do_connect {
        ) {
 
         DEBUG and warn "CON: Reusing socket (request ID = $request_id)\n";
-        $socket_factory = $request->[REQ_WHEEL] = $heap->{address_to_wheel}->{$hostport};
-    	$request->[REQ_WHEEL]->set_input_filter (POE::Filter::HTTPHead->new);
+	#FIXME: this needs to be fixed, since you can't assign things to
+	#       a normal sub. needs a test that comes here every time
+        $socket_factory = $request->wheel( $heap->{address_to_wheel}->{$hostport});
+    	$request->wheel->set_input_filter (POE::Filter::HTTPHead->new);
         $keep_alive++;
 
     } else {
@@ -549,24 +292,17 @@ sub poco_weeble_do_connect {
 
         # Create a socket factory.
         $socket_factory =
-          $request->[REQ_WHEEL] =
+          $request->wheel (
             POE::Wheel::SocketFactory->new(
               RemoteAddress => $address,
               RemotePort    => $request->[REQ_PORT],
               SuccessEvent  => 'got_connect_done',
               FailureEvent  => 'got_connect_error',
-            );
+            ));
 
     }
 
-    # Create a timeout timer.
-    $request->[REQ_TIMER] =
-      $kernel->delay_set(
-        got_timeout =>
-        $heap->{timeout} - (time() - $request->[REQ_START_TIME]) =>
-        $request_id
-      );
-    DEBUG and warn "TKO: request $request_id has timer $request->[REQ_TIMER]\n";
+    $request->create_timer ($heap->{timeout});
 
     # Cross-reference the wheel and timer IDs back to the request.
     $heap->{timer_to_request}->{$request->[REQ_TIMER]} = $request_id;
@@ -581,8 +317,8 @@ sub poco_weeble_do_connect {
     # We don't have to connect_ok() if we're using a cached wheel.  Just
     # send the request.
     if ($keep_alive) {
-        $request->[REQ_WHEEL] = $socket_factory;
-        _put_request($request);
+        #_put_request($request);
+	$request->send_to_wheel;
     }
 
 }
@@ -596,7 +332,10 @@ sub poco_weeble_connect_ok {
 
     # Remove the old wheel ID from the look-up table.
     my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
-    die "!!!: Unexpectedly undefined request ID" unless defined $request_id;
+    if (not defined $request_id) {
+      DEBUG and warn "!!!: Unexpectedly undefined request ID";
+      return;
+    }
 
     DEBUG and warn "CON: wheel $wheel_id (request $request_id) connected ok...\n";
 
@@ -655,8 +394,7 @@ sub poco_weeble_connect_ok {
 
 # }}} Switch the handle to SSL if we're doing that.
 
-    my $block_size = $heap->{streaming} || DEFAULT_BLOCK_SIZE;
-    $block_size = DEFAULT_BLOCK_SIZE if $block_size < 1;
+    my $block_size = $heap->{factory}->block_size;
 
     # Make a ReadWrite wheel to interact on the socket.
     my $new_wheel = POE::Wheel::ReadWrite->new(
@@ -676,11 +414,7 @@ sub poco_weeble_connect_ok {
 
     $heap->{wheel_to_request}->{ $new_wheel->ID() } = $request_id;
 
-    # Switch wheels.  This is cumbersome, but it works around a bug in
-    # older versions of POE.
-
-    $request->[REQ_WHEEL] = undef;
-    $request->[REQ_WHEEL] = $new_wheel;
+    $request->wheel ($new_wheel);
 
     K and DEBUG and warn "CON: stashing output wheel " . $new_wheel->ID . "\n";
     my $hostport = $request->[REQ_HOST] . ':' . $request->[REQ_PORT];
@@ -692,7 +426,7 @@ sub poco_weeble_connect_ok {
     # warn "DON'T REQUIRE ME TO CONNECT BEFORE I START SENDING, PLEASE!";
     # warn "Assume each request is brand new, is there 'init_request' behavior here that should be better grouped?!";
 
-    _put_request($request);
+    $request->send_to_wheel;
 
 }
 
@@ -704,9 +438,10 @@ sub poco_weeble_connect_error {
     my ($kernel, $heap, $operation, $errnum, $errstr, $wheel_id) =
       @_[KERNEL, HEAP, ARG0..ARG3];
 
+    warn "CON: Error with wheel $wheel_id";
     # Drop the wheel and its cross-references.
     my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
-    die "!!!: expected a request ID, but there is none" unless defined $request_id;
+    #die "!!!: expected a request ID, but there is none" unless defined $request_id;
 
     DEBUG and
       warn "CON: wheel $wheel_id (request $request_id) encountered $operation error $errnum: $errstr\n";
@@ -730,7 +465,7 @@ sub poco_weeble_timeout {
   DEBUG and warn "TKO: request $request_id timed out\n";
 
   # Discard the request.  Keep a copy for a few bits of cleanup.
-  warn "I/O: removing request $request_id";
+  DEBUG and warn "I/O: removing request $request_id";
   my $request = delete $heap->{request}->{$request_id};
 
   unless (defined $request) {
@@ -744,8 +479,8 @@ sub poco_weeble_timeout {
   DEBUG and warn "TKO: request $request_id has timer $request->[REQ_TIMER]\n";
 
   # There's a wheel attached to the request.  Shut it down.
-  if (defined $request->[REQ_WHEEL]) {
-    my $wheel_id = $request->[REQ_WHEEL]->ID();
+  if (defined $request->wheel) {
+    my $wheel_id = $request->wheel->ID();
     DEBUG and warn "TKO: request $request_id is wheel $wheel_id\n";
     delete $heap->{wheel_to_request}->{$wheel_id};
 
@@ -761,8 +496,18 @@ sub poco_weeble_timeout {
 
   DEBUG and die  "TKO: request $request_id is unexpectedly zero" unless $request->[REQ_STATE];
   DEBUG and warn "TKO: request_state = " . sprintf("%#04x\n", $request->[REQ_STATE]);
+
+  if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and not $request->[REQ_STATE] & RS_POSTED) {
+
+    #warn "request_id is $request_id, while request's id is $request->[REQ_ID]";
+    _finish_request($heap, $request_id, $request);
+    return;
+  } elsif ($request->[REQ_STATE] & RS_POSTED) {
+    #K and DEBUG and warn "I/O: Disconnect, keepalive timeout or HTTP/1.0.\n";
+    $request->[REQ_POSTBACK]->(HTTP::Response->new(408, "Request timed out")) if $request->[REQ_STATE];
+    return;
+  }
   # Post an error response back to the requesting session.
-  $request->[REQ_POSTBACK]->(HTTP::Response->new(408, "Request timed out")) if $request->[REQ_STATE];
 }
 
 # }}} poco_weeble_timeout
@@ -775,16 +520,20 @@ sub poco_weeble_io_flushed {
   # We sent the request.  Now we're looking for a response.  It may be
   # bad to assume we won't get a response until a request has flushed.
   my $request_id = $heap->{wheel_to_request}->{$wheel_id};
-  die "!!!: unexpectedly undefined request ID" unless defined $request_id;
+  if (not defined $request_id) {
+    DEBUG and warn "!!!: unexpectedly undefined request ID";
+    return;
+  }
 
   DEBUG and warn "I/O: wheel $wheel_id (request $request_id) flushed its request...\n";
 
   my $request = $heap->{request}->{$request_id};
+  $request->[REQ_STATE] ^= RS_SENDING;
   $request->[REQ_STATE] = RS_IN_STATUS;
   # XXX - Removed a second time.  The first time was in version 0.53,
   # because the EOF generated by shutdown_output() causes some servers
   # to disconnect rather than send their responses.
-  # $request->[REQ_WHEEL]->shutdown_output();
+  # $request->wheel->shutdown_output();
 }
 
 # }}} poco_weeble_io_flushed
@@ -805,11 +554,10 @@ sub poco_weeble_io_error {
     # Drop the wheel's cached connection, too.
     K and my $hostport = delete $heap->{wheel_to_address}->{$wheel_id};
     K and delete $heap->{address_to_wheel}->{$hostport};
-    # K and delete $heap->{address_to_wheel}->{$hostport->{HOST}} unless keys %{$heap->{address_to_wheel}->{$hostport->{HOST}}};
 
     if ($request_id ) {
 
-        warn "I/O: removing request $request_id";
+        DEBUG and warn "I/O: removing request $request_id";
         my $request = delete $heap->{request}->{$request_id};
         _remove_timeout($kernel, $heap, $request);
 
@@ -824,6 +572,7 @@ sub poco_weeble_io_error {
 
         # Otherwise the remote end simply closed.  If we've got a
         # pending response, then post it back to the client.
+	DEBUG and warn "STATE is ", $request->[REQ_STATE];
         if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and not $request->[REQ_STATE] & RS_POSTED) {
 
             _finish_request($heap, $request_id, $request);
@@ -836,7 +585,7 @@ sub poco_weeble_io_error {
 
         # We haven't built a proper response.  Send back an error.
         $request->[REQ_POSTBACK]->(
-          HTTP::Response->new( 400, "incomplete response" )
+          HTTP::Response->new( 400, "incomplete response $request_id" )
         );
     }
 }
@@ -848,153 +597,80 @@ sub poco_weeble_io_error {
 # in the other direction.
 # {{{ poco_weeble_io_read
 
-my $NL;
-
 sub poco_weeble_io_read {
   my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
   my $request_id = $heap->{wheel_to_request}->{$wheel_id};
 
-  #return unless defined $request_id;
+  DEBUG and warn "I/O: wheel $wheel_id got input...\n";
+  DEBUG_DATA and warn((ref($input) ? $input->as_string : _hexdump($input)), "\n");
+
+  return unless defined $request_id;
   die unless defined $request_id;
   my $request = $heap->{request}->{$request_id};
-
-  DEBUG and warn "I/O: wheel $wheel_id got input...\n";
-  DEBUG_DATA and warn(_hexdump($input), "\n");
+  return unless defined $request;
+  DEBUG and warn "REQUEST is $request";
 
   # Reset the timeout if we get data.
   $kernel->delay_adjust($request->[REQ_TIMER], $heap->{timeout});
 
-# {{{ status line
+# {{{ HEAD
 
   # The very first line ought to be status.  If it's not, then it's
   # part of the content.
   if ($request->[REQ_STATE] & RS_IN_STATUS) {
-    my $filter = $request->[REQ_WHEEL]->get_input_filter;
-    warn "FILTER is $filter";
-    $NL = $request->[REQ_WHEEL]->get_input_filter->[0]->[0]->[1];
-    warn "NEWLINE is $NL";
+    my $filter = $request->wheel->get_input_filter;
+    #warn "FILTER is $filter";
     if (defined $input) {
       $input->request ($request->[REQ_REQUEST]);
-      warn "INPUT for ", $request->[REQ_REQUEST]->uri, " is \n",$input->as_string;
+      #warn "INPUT for ", $request->[REQ_REQUEST]->uri, " is \n",$input->as_string;
     } else {
-      warn "NO INPUT\n";
+      #warn "NO INPUT\n";
     }
+    # FIXME: LordVorp gets here without $input being a HTTP::Response
     $request->[REQ_RESPONSE] = $input;
     if ($request->[REQ_REQUEST]->method eq 'HEAD'
      || $input->code =~ /^(?:1|[23]04)/) {
       $request->[REQ_STATE] = RS_DONE;
     } else {
-      $request->[REQ_STATE] = RS_CHK_REDIRECT;
+      $request->[REQ_STATE] = RS_IN_CONTENT;
       my $te = $input->header('Transfer-Encoding');
       my @te = split(/\s*,\s*/, lc($te));
       $te = pop(@te);
-      warn "transfer encoding $te";
+      DEBUG and warn "I/O: transfer encoding $te";
+      if (my $newrequest = $request->check_redirect) {
+	$kernel->yield (request => $request,
+	  $newrequest, "_redir_".$request->ID, $request->[REQ_PROG_POSTBACK]);
+      }
+
+      # do this last, because it triggers a read
       if ($te eq 'chunked') {
-	$request->[REQ_WHEEL]->set_input_filter (POE::Filter::HTTPChunk->new (Response => $input));
+	$request->wheel->set_input_filter (POE::Filter::HTTPChunk->new (Response => $input));
       } else {
-	$request->[REQ_WHEEL]->set_input_filter (POE::Filter::Stream->new);
+	$request->wheel->set_input_filter (POE::Filter::Stream->new);
       }
     }
     return;
   }
 
-# }}} status line
-# {{{ redirect
-  # Edge case between RS_IN_HEADERS and RS_IN_CONTENT.  We'll see if
-  # HTML header parsing is necessary (and enable it if it is).  We'll
-  # also check for redirection, if enabled.
+# }}} HEAD
 
   # Aggregate the new input.
-  $request->[REQ_BUFFER] .= $input;
+  #warn "got more input '$input'";
 
-  if ($request->[REQ_STATE] & RS_CHK_REDIRECT) {
-  # We only go through this once per request.
-    $request->[REQ_STATE] = RS_IN_CONTENT;
-
-    # Check for redirection, if enabled. Yield request to ourselves.
-    # Prevent looping, either through maximum hops, or repeat.
-    #
-    # -><- I wonder.  Will we need to defer the redirect check until
-    # the HTML <HEAD></HEAD> section is loaded?  Headers in there may
-    # alter the response's base() result.  Would that be significant?
-    if ($request->[REQ_RESPONSE]->is_redirect() && $heap->{max_redirects}) {
-      my $uri = $request->[REQ_RESPONSE]->header('Location');
-      # Canonicalize relative URIs.
-      my $base = $request->[REQ_RESPONSE]->base();
-      $uri = URI->new($uri, $base)->abs($base);
-
-      DEBUG and warn "RED: Redirected to ".$uri."\n";
-
-      my @history = @{$heap->{redir}->{$request_id}->{hist}};
-      if (@history > 5 || grep($uri eq $_, @history)) {
-	$request->[REQ_STATE] = RS_DONE;
-	DEBUG and warn "RED: Too much redirection, moving to done\n";
-      } else { # All fine, yield new request and mark this disabled.
-	my $newrequest = $request->[REQ_REQUEST]->clone();
-	$newrequest->uri($uri);
-
-	my ($new_host, $new_port);
-	eval {
-	  $new_host = $uri->host();
-	  $new_port = $uri->port();
-	  if ($new_port == 80) {
-	    $newrequest->header( Host => $new_host );
-	  } else {
-	    $newrequest->header( Host => "$new_host:$new_port" );
-	  }
-	};
-	warn $@ if $@;
-
-	$kernel->yield(
-	    request => 'dummystate',
-	    $newrequest, "_redir_".$request_id,
-	    $request->[REQ_PROG_POSTBACK]
-	    );
-	$heap->{redir}->{$request_id}->{request} = $request->[REQ_REQUEST];
-	$heap->{redir}->{$request_id}->{followed} = 1; # Mark redirected.
-
-	  DEBUG and warn "RED: COMPLETE THE REDIRECT THE RIGHT WAY!\n"; # warn $request_id;
-	if (K) {
-	  # _remove_timeout($kernel, $heap, $request);
-	  # _finish_redirect($heap, $request_id, $request);
-	  $heap->{redir}->{$request_id}->{timeout} = $request->[REQ_TIMER];
-
-	  # _finish_request($heap, $request_id, $request);
-	  _respond($heap, $request_id, $request);
-	  $request->[REQ_STATE] = RS_DONE | RS_POSTED;
-	}
-      }
-    }
-
-    # Not a redirect.  Begin parsing headers if this is HTML.
-    else {
-      if ($request->[REQ_RESPONSE]->content_type() eq "text/html") {
-	$request->[REQ_HEAD_PARSER] = HTML::HeadParser->new(
-	    $request->[REQ_RESPONSE]->{_headers}
-	    );
-      }
-
-      0 and DEBUG and do {
-	warn "server got response...\n";
-	my $http_response = $request->[REQ_RESPONSE];
-
-	my $response_string = $http_response->as_string();
-	$response_string =~ s/^/| /mg;
-
-	warn ",", '-' x 78, "\n";
-	warn $response_string;
-	warn "`", '-' x 78, "\n";
-      };
-
+  if ($request->[REQ_STATE] & RS_IN_CONTENT) {
+    if (ref($input)) {
+      $request->[REQ_STATE] = RS_DONE;
+    } else {
+      $request->[REQ_BUFFER] .= $input;
     }
   }
 
-# }}} redirect
 # {{{ content
 
   # We're in a content state.  This isn't an else clause because we
   # may go from header to content in the same read.
   if ($request->[REQ_STATE] & RS_IN_CONTENT) {
+
 
     # First pass the new chunk through our HeadParser, if we have one.
     # This also destroys the HeadParser if its purpose is done.
@@ -1013,18 +689,11 @@ sub poco_weeble_io_read {
     $request->[REQ_OCTETS_GOT] += $this_chunk_length;
 
 
-    # We've gone over the maximum content size to return.  Chop it
-    # back.
-    if ($heap->{max_size} and $request->[REQ_OCTETS_GOT] > $heap->{max_size}) {
-      my $over = $request->[REQ_OCTETS_GOT] - $heap->{max_size};
-      $request->[REQ_OCTETS_GOT] -= $over;
-      substr($request->[REQ_BUFFER], -$over) = "";
-    }
-
+    $heap->{factory}->check_size_constraint ($request);
     # If we are streaming, send the chunk back to the client session.
     # Otherwise add the new octets to the response's content.  -><-
     # This should only add up to content-length octets total!
-    if ($heap->{streaming}) {
+    if ($heap->{factory}->is_streaming) {
       $request->[REQ_POSTBACK]->(
 	$request->[REQ_RESPONSE], $request->[REQ_BUFFER]
       );
@@ -1124,15 +793,13 @@ sub poco_weeble_io_read {
       } else {
 # Hang up on purpose.
 	$request_id = delete $heap->{wheel_to_request}->{$wheel_id};
-	warn "I/O: removing request $request_id";
+	DEBUG and warn "I/O: removing request $request_id";
 	$request    = delete $heap->{request}->{$request_id};
       }
 
       _remove_timeout($kernel, $heap, $request);
 
-      DEBUG and warn "I/O: This was orignally _respond()\n";
       _finish_request($heap, $request_id, $request);
-# _respond($heap, $request_id, $request);
     }
   }
 
@@ -1144,6 +811,7 @@ sub poco_weeble_io_read {
   if (K and $request->[REQ_STATE] & RS_DONE and not $request->[REQ_STATE] & RS_POSTED) {
     DEBUG and warn(
 	"I/O: Calling finish_request() from 'post_finished_requests' of io_read\n",
+	"I/O: $request->[REQ_ID] or $request_id\n",
 	"I/O: postback = $request->[REQ_POSTBACK]\n",
 	);
     _finish_request($heap, $request_id, $request);
@@ -1157,19 +825,6 @@ sub poco_weeble_io_read {
 # }}} poco_weeble_io_read
 
 
-#------------------------------------------------------------------------------
-# Determine whether a host is in a no-proxy list. This is not a POE function.
-# {{{ _in_no_proxy
-
-sub _in_no_proxy {
-  my ($host, $no_proxy) = @_;
-  foreach my $no_proxy_domain (@$no_proxy) {
-    return 1 if $host =~ /\Q$no_proxy_domain\E$/i;
-  }
-  return 0;
-}
-
-# }}} _in_no_proxy
 #------------------------------------------------------------------------------
 # Generate a hex dump of some input. This is not a POE function.
 # {{{ _hexdump
@@ -1223,184 +878,58 @@ sub _post_error {
 
 # }}} _post_error
 #------------------------------------------------------------------------------
-# Generate a response, and if necessary postback. This is not a POE function.
-# {{{ _respond
-
-sub _respond {
-  my($heap, $request_id, $request) = @_;
-  my $response = $request->[REQ_RESPONSE];
-  if ($heap->{max_redirects}) {
-    # If this page sent redirect, store response and return.
-    if ($heap->{redir}->{$request_id}->{followed}) {
-      $heap->{redir}->{$request_id}->{response} = $response;
-      return;
-    }
-    else { # No redirect, or real destination => assemble chain and return
-      my $tmpresponse = $response;
-      while (defined $heap->{redir}->{$request_id}->{from}) {
-        my $prev = $heap->{redir}->{$request_id}->{from};
-        $tmpresponse->previous(delete $heap->{redir}->{$prev}->{response});
-        $tmpresponse = $tmpresponse->previous();
-        $request_id = $prev;
-      }
-    }
-  }
-  $request->[REQ_POSTBACK]->($response);
-}
-
-# }}} _respond
-
-#------------------------------------------------------------------------------
 # Complete a request. This was moved out of poco_weeble_io_error(). This is
 # not a POE function.
 # {{{ _finish_request
 
 sub _finish_request {
-    my ($heap, $request_id, $request) = @_;
+  my ($heap, $request_id, $request) = @_;
 
-    if (DEBUG) {
-      my ($pkg, $file, $line) = caller();
-      warn "XXX: calling _finish_request(request id = $request_id) at $file line $line\n";
+  if (DEBUG) {
+    my ($pkg, $file, $line) = caller();
+    DEBUG and warn "XXX: calling _finish_request(request id = $request_id) at $file line $line\n";
+  }
+
+  # If we have a cookie jar, have it frob our headers.  LWP rocks!
+  $heap->{factory}->frob_cookies ($request);
+
+  # If we're streaming, the response is HTTP::Response without
+  # content and undef to signal the end of the stream.  Otherwise
+  # it's the entire HTTP::Response object we've carefully built.
+  if ($heap->{factory}->is_streaming) {
+    $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE], undef);
+  } else {
+    $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE]);
+  }
+
+  # KeepAlive: added the RS_POSTED flag
+  $request->[REQ_STATE] = RS_DONE | RS_POSTED;
+
+  my $wheel = $request->wheel;
+  DEBUG and warn "Wheel from request is ", $wheel->ID;
+  # clean up the request
+  my $address = "$request->[REQ_HOST]:$request->[REQ_PORT]";
+  if ($heap->{address_to_wheel}->{$address}) {
+    my $wheel_id = $heap->{address_to_wheel}->{$address}->ID();
+    DEBUG and warn "wheel for $address is $wheel_id";
+    if ($wheel->ID == $wheel_id) {
+      my $other_request_id = $heap->{wheel_to_request}->{$wheel_id};
+      DEBUG and warn "other request is $other_request_id";
+      do {
+	DEBUG and warn "deleting address_to_wheel";
+	delete $heap->{address_to_wheel}
+      }
+	if (	not defined ($other_request_id)
+	    or  $request_id == $other_request_id
+	);
     }
+  }
 
-    # If we have a cookie jar, have it frob our headers.  LWP rocks!
-    if (defined $heap->{cookie_jar}) {
-        $heap->{cookie_jar}->extract_cookies($request->[REQ_RESPONSE]);
-    }
-
-    # If we're streaming, the response is HTTP::Response without
-    # content and undef to signal the end of the stream.  Otherwise
-    # it's the entire HTTP::Response object we've carefully built.
-    if ($heap->{streaming}) {
-        $request->[REQ_POSTBACK]->(
-          $request->[REQ_RESPONSE], undef
-        );
-    } else {
-        _respond($heap, $request_id, $request);
-    }
-
-    # KeepAlive: added the RS_POSTED flag
-    $request->[REQ_STATE] = RS_DONE | RS_POSTED;
-
-    # clean up the request
-    if ($heap->{address_to_wheel}->{"$request->[REQ_HOST]:$request->[REQ_PORT]"}) {
-        my $wheel_id = $heap->{address_to_wheel}->{"$request->[REQ_HOST]:$request->[REQ_PORT]"}->ID();
-
-        my $other_request_id = delete $heap->{wheel_to_request}->{$wheel_id};
-        # die "expected a request ID, but there is none" unless defined $request_id;
-        return unless defined $other_request_id;
-
-        if ($request_id != $other_request_id) {
-          die(
-            "I/O: _finish_request(id = $request_id) ",
-            "does not match the request ID associated with wheel $wheel_id ",
-            "(that request ID is $other_request_id)"
-          );
-        }
-
-        warn "I/O: removing request $request_id";
-        my $request = delete $heap->{request}->{$request_id};
-    }
-
+  DEBUG and warn "I/O: removing request $request_id";
+  my $request = delete $heap->{request}->{$request_id};
 }
 
 # }}} _finish_request
-
-# {{{ _finish_redirect
-
-sub _finish_redirect {
-    my ($heap, $request_id, $request) = @_;
-
-    # If we have a cookie jar, have it frob our headers.  LWP rocks!
-    if (defined $heap->{cookie_jar}) {
-        $heap->{cookie_jar}->extract_cookies($request->[REQ_RESPONSE]);
-    }
-
-    # If we're streaming, the response is HTTP::Response without
-    # content and undef to signal the end of the stream.  Otherwise
-    # it's the entire HTTP::Response object we've carefully built.
-    if ($heap->{streaming}) {
-        $request->[REQ_POSTBACK]->(
-          $request->[REQ_RESPONSE], undef
-        );
-    } else {
-        _respond($heap, $request_id, $request);
-    }
-
-    # KeepAlive: added the RS_POSTED flag
-    $request->[REQ_STATE] = RS_DONE | RS_POSTED;
-
-
-    # HERE we skip the wheel deletion for redirects:
-    if (0) {
-        # clean up the request
-        my $wheel_id = $heap->{address_to_wheel}->{"$request->[REQ_HOST]:$request->[REQ_PORT]"}->ID();
-
-        my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
-        # die "expected a request ID, but there is none" unless defined $request_id;
-        return unless defined $request_id;
-
-        warn "I/O: removing request $request_id";
-        my $request = delete $heap->{request}->{$request_id};
-    }
-
-}
-
-# }}} _finish_redirect
-
-#------------------------------------------------------------------------------
-# Send a request. This was moved out of poco_weeble_connect_ok(). This is not a
-# POE function.
-# {{{ _put_request
-
-sub _put_request {
-  my ($request) = @_;
-
-  # We're now in a sending state.
-  $request->[REQ_STATE] = RS_SENDING;
-
-  # warn "SWITCHED TO SENDING, separate me from the WHEEL setup, please!";
-  # warn $request;
-
-  # Put the request.  HTTP::Request's as_string() method isn't quite
-  # right.  It uses the full URL on the request line, so we have to
-  # put the request in pieces.
-
-  my $http_request = $request->[REQ_REQUEST];
-
-  # MEXNIX 2002-06-01: Check for proxy.  Request query is a bit
-  # different...
-
-  my $request_uri;
-  if ($request->[REQ_USING_PROXY]) {
-    $request_uri = $http_request->uri()->canonical();
-  }
-  else {
-    $request_uri = $http_request->uri()->canonical()->path_query();
-  }
-
-  my $request_string = (
-    $http_request->method() . ' ' .
-    $request_uri . ' ' .
-    $http_request->protocol() . "\x0D\x0A" .
-    $http_request->headers_as_string("\x0D\x0A") . "\x0D\x0A" .
-    $http_request->content() # . "\x0D\x0A"
-  );
-
-  DEBUG and do {
-    my $formatted_request_string = $request_string;
-    $formatted_request_string =~ s/([^\n])$/$1\n/;
-    $formatted_request_string =~ s/^/| /mg;
-    warn ",----- SENDING REQUEST ", '-' x 56, "\n";
-    warn $formatted_request_string;
-    warn "`", '-' x 78, "\n";
-  };
-
-  $request->[REQ_WHEEL]->put( $request_string );
-
-}
-
-# }}} _put_request
 
 #------------------------------------------------------------------------------
 # Cancel a request timeout. This was all over the place and is now a function.

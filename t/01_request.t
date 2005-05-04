@@ -41,6 +41,7 @@ sub client_start {
                  GET 'http://poe.perl.org/misc/test.html', Connection => 'close'
                );
 
+
   $kernel->post( weeble => request => got_response =>
                  ( POST 'http://poe.perl.org/misc/test.cgi',
                    [ cgi_field_one => '111',
@@ -50,7 +51,6 @@ sub client_start {
                    ] # , Connection => 'close',
                  )
                );
-
 
   $kernel->post( weeble => request => got_response =>
                  GET 'http://poe.perl.org/misc/test.cgi?cgi_field_fiv=555', Connection => 'close'
@@ -66,6 +66,7 @@ sub client_start {
   else {
     $test_results[3] = 'ok 4 # skipped: need Net::SSLeay::Handle to test SSL';
   }
+
 
   $kernel->post( weeble => request => got_response =>
                  GET 'http://poe.perl.org', Connection => 'close'
@@ -83,7 +84,6 @@ sub client_start {
                  GET 'http://poe.perl.org/misc/stream-test.cgi', Connection => 'close'
                );
 
-
   $kernel->post( redirector => request => got_redir_response =>
                  GET 'http://poe.perl.org/misc/redir-test.cgi', Connection => 'close'
                );
@@ -91,6 +91,7 @@ sub client_start {
   $kernel->yield('check_counts', 9, (HAS_SSL ? 7 : 6));
 
 }
+
 
 sub client_check_counts {
   my ($kernel, $test_number, $expected_count) = @_[KERNEL, ARG0, ARG1];
@@ -169,7 +170,7 @@ sub client_got_big_response {
      ) {
       $test_results[6] = 'ok 7';
   } else {
-      warn "WARNING!!!", length($http_response->content());
+      warn "WARNING!!! got ", length($http_response->content()), " expected ", MAX_BIG_REQUEST_SIZE;
   }
 }
 
@@ -210,7 +211,7 @@ sub client_got_redir_response {
       }
     }
     else {
-      $test_results[9] = "not ok 10 # bad code: " .  $http_response->code;
+      $test_results[9] = "not ok 10 # bad code: " .  $http_response->code . " " . $http_response->message;
     }
   }
   else {
@@ -234,16 +235,15 @@ sub client_got_stream_response {
     my $response_string = $http_headers->as_string();
     $response_string =~ s/^/| /mg;
 
-    $chunk = "(undef)" unless defined $chunk;
-
     warn ",", '-' x 78, "\n";
     warn $response_string;
     warn "`", '-' x 78, "\n";
-    warn $chunk, "\n";
+    warn ($chunk ? $chunk : "(undef)"), "\n";
     warn "`", '-' x 78, "\n";
   };
 
   return if $test_8_failed;
+  #warn "haven't failed yet";
 
   if (defined $chunk) {
     $chunk_buffer .= $chunk;
@@ -259,6 +259,9 @@ sub client_got_stream_response {
     }
   }
   else {
+    #warn "total: $total_octets_got is ", 26 * MAX_STREAM_CHUNK_SIZE;
+    #warn "next: $next_chunk_character";
+    #warn "length: ", length($chunk_buffer);
     $test_results[7] = 'ok 8'
       if ( ($total_octets_got == 26 * MAX_STREAM_CHUNK_SIZE)
            and ($next_chunk_character eq "AA")
@@ -272,7 +275,7 @@ sub client_got_stream_response {
 # Create a weeble component.
 POE::Component::Client::HTTP->spawn(
   MaxSize => MAX_BIG_REQUEST_SIZE,
-  Timeout => 10,
+  Timeout => 2,
   Protocol => 'HTTP/1.1',
 );
 
@@ -306,3 +309,14 @@ POE::Session->create
 $poe_kernel->run();
 
 exit;
+
+__END__
+
+POST /misc/test.cgi HTTP/1.1
+Host: poe.perl.org
+User-Agent: POE-Component-Client-HTTP/0.65 (perl; N; POE; en; rv:0.650000)
+Content-Length: 71
+Content-Type: application/x-www-form-urlencoded
+
+cgi_field_one=111&cgi_field_two=222&cgi_field_six=666&cgi_field_ten=AAA
+

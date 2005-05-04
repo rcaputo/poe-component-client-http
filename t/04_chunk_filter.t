@@ -54,20 +54,20 @@ sub start {
 
 sub input {
 	my ($kernel, $heap, $data) = @_[KERNEL, HEAP, ARG0];
-	print STDERR "$data";
+	#print STDERR "$data";
 	if ($heap->{wheel}->get_input_filter->isa('POE::Filter::HTTPHead')) {
 	  if (UNIVERSAL::isa ($data, 'HTTP::Response')) {
 	  	my $te = $data->header('Transfer-Encoding');
 		my @te = split(/\s*,\s*/, lc($te));
 		$te = pop(@te);
-		warn "transfer encoding $te";
+		#warn "transfer encoding $te";
 		if ($te eq 'chunked') {
 	  		$heap->{wheel}->set_filter (POE::Filter::HTTPChunk->new (Response => $response));
 		} else {
 	  		$heap->{wheel}->set_filter (POE::Filter::Line->new);
 		}
 	  } else {
-	    print STDERR "not a response\n";
+	    #print STDERR "not a response\n";
 	  }
 	}
 }
@@ -78,7 +78,7 @@ sub error {
 	if ($errno == 0) {
 		$got_eof = 1;
 	} else {
-		print STDERR "$type err $errno ($errmsg) for $id\n";
+		#print STDERR "$type err $errno ($errmsg) for $id\n";
 	}
 	delete $heap->{wheel};
 }

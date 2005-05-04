@@ -53,12 +53,12 @@ sub start {
 
 sub input {
 	my ($kernel, $heap, $data) = @_[KERNEL, HEAP, ARG0];
-	print STDERR "got input $data\n";
+	#print STDERR "got input $data\n";
 	if ($heap->{wheel}->get_input_filter->isa('POE::Filter::HTTPHead')) {
 	  if (UNIVERSAL::isa ($data, 'HTTP::Response')) {
 	  	$got_input = 1;
 	  } else {
-	    print STDERR "not a response\n";
+	    #print STDERR "not a response\n";
 	  }
 	  $heap->{wheel}->set_filter (POE::Filter::Line->new);
 	}
@@ -70,7 +70,7 @@ sub error {
 	if ($errno == 0) {
 		$got_eof = 1;
 	} else {
-		print STDERR "$type err $errno ($errmsg) for $id\n";
+		#print STDERR "$type err $errno ($errmsg) for $id\n";
 	}
 	delete $heap->{wheel};
 }
