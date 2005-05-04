@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 7;
+use Test::More tests => 8;
 
 use POE qw(
 		Wheel::ReadWrite
@@ -18,7 +18,7 @@ use IO::Handle;
 use IO::File;
 
 autoflush STDOUT 1;
-my $request_number = 7;
+my $request_number = 8;
 
 my $session = POE::Session->create(
 	inline_states => {
@@ -59,6 +59,7 @@ sub input {
   }
   $request_number--;
 
+  $request_number == 7 and isa_ok ($data, 'HTTP::Response', "Ok without headers");
   $request_number == 6 and isa_ok ($data, 'HTTP::Response', "Got our object");
   $request_number == 5 and ok(!defined($data), "Got a bad request");
   $request_number == 4 and
@@ -89,6 +90,8 @@ sub error {
 # the number of tests planned.
 
 __DATA__
+HTTP/1.1 202 Accepted
+
 HTTP/1.1 200 Ok
 Date: Mon, 08 Nov 2004 21:37:20 GMT
 Server: Apache/2.0.50 (Debian GNU/Linux) DAV/2 SVN/1.0.1-dev mod_ssl/2.0.50 OpenSSL/0.9.7d
