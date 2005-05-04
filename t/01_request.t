@@ -7,7 +7,7 @@ use HTTP::Request::Common qw(GET POST);
 
 use lib '/home/troc/perl/poe';
 sub POE::Kernel::ASSERT_DEFAULT () { 1 }
-use POE qw(Component::Client::HTTP);
+use POE qw(Component::Client::HTTP Component::Client::Keepalive);
 
 sub DEBUG () { 0 }
 
@@ -22,14 +22,8 @@ my @test_results = (
   'not ok 7', 'not ok 8', 'not ok 9', 'not ok 10',
 );
 
-BEGIN {
-  my $has_ssl = 0;
-  eval { require Net::SSLeay::Handle;
-         $has_ssl = 1;
-       };
-  eval "sub HAS_SSL () { $has_ssl }";
-}
 
+my $cm = POE::Component::Client::Keepalive->new;
 #------------------------------------------------------------------------------
 
 sub client_start {
@@ -57,16 +51,10 @@ sub client_start {
                );
 
 
-  if (HAS_SSL) {
-    my $secure_request = GET 'https://sourceforge.net/projects/poe/';
-    $kernel->post( weeble => request => got_response =>
-                   $secure_request, Connection => 'close'
-                 );
-  }
-  else {
-    $test_results[3] = 'ok 4 # skipped: need Net::SSLeay::Handle to test SSL';
-  }
-
+  my $secure_request = GET 'https://sourceforge.net/projects/poe/';
+  $kernel->post( weeble => request => got_response =>
+                 $secure_request, Connection => 'close'
+               );
 
   $kernel->post( weeble => request => got_response =>
                  GET 'http://poe.perl.org', Connection => 'close'
@@ -88,7 +76,7 @@ sub client_start {
                  GET 'http://poe.perl.org/misc/redir-test.cgi', Connection => 'close'
                );
 
-  $kernel->yield('check_counts', 9, (HAS_SSL ? 7 : 6));
+  $kernel->yield('check_counts', 9, 7);
 
 }
 
@@ -107,6 +95,8 @@ sub client_stop {
   foreach (@test_results) {
     print "$_\n";
   }
+  $cm->shutdown;
+  $cm = undef;
 }
 
 sub client_got_response {
@@ -139,8 +129,6 @@ sub client_got_response {
     }
     elsif ($http_response->code == 500) {
       $test_results[5] = 'ok 6' if $response_string =~ /foo\.poe\.perl\.org/;
-      $test_results[3] = 'ok 4 # recent Net::SSL required to test https'
-        if $response_string =~ /https/;
     }
   }
   else {
@@ -275,14 +263,16 @@ sub client_got_stream_response {
 # Create a weeble component.
 POE::Component::Client::HTTP->spawn(
   MaxSize => MAX_BIG_REQUEST_SIZE,
-  Timeout => 2,
+  Timeout => 5,
   Protocol => 'HTTP/1.1',
+  ConnectionManager => $cm,
 );
 
 # Create one for streaming.
 POE::Component::Client::HTTP->spawn(
   Streaming => MAX_STREAM_CHUNK_SIZE,
   Alias     => "streamer",
+  ConnectionManager => $cm,
 );
 
 # Create one for redirection.
@@ -290,6 +280,7 @@ POE::Component::Client::HTTP->spawn(
   FollowRedirects => 5,
   Alias           => "redirector",
   Protocol => 'HTTP/1.1',
+  ConnectionManager => $cm,
 );
 
 # Create a session that will make some requests.

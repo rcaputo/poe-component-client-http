@@ -4,13 +4,14 @@ use HTTP::Request::Common qw(GET POST);
 
 use lib '/home/troc/perl/poe';
 sub POE::Kernel::ASSERT_DEFAULT () { 1 }
-use POE qw(Component::Client::HTTP);
+use POE qw(Component::Client::HTTP Component::Client::Keepalive);
 
 sub DEBUG () { 0 }
 
 sub MAX_BIG_REQUEST_SIZE  () { 4096 }
 sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
 
+my $cm;
 $| = 1;
 
 my @test_results = (
@@ -69,6 +70,8 @@ DEBUG and warn "client stopped...\n";
 foreach (@test_results) {
 print "$_\n";
 }
+$cm->shutdown;
+$cm = undef;
 }
 
 sub client_got_first_response {
@@ -184,10 +187,14 @@ if ($http_response->code == 200) {
 
 #------------------------------------------------------------------------------
 
+# Create a Client::Keepalive component
+$cm = POE::Component::Client::Keepalive->new;
+
 # Create a weeble component.
 POE::Component::Client::HTTP->spawn(
 				    # MaxSize => MAX_BIG_REQUEST_SIZE,
 				    Timeout => 2,
+				    ConnectionManager => $cm,
 );
 
 # Create a weeble component.
@@ -196,6 +203,7 @@ POE::Component::Client::HTTP->spawn(Alias   => 'chunk',
 				    Timeout => 5,
 				    FollowRedirects => 1,
 				    Protocol => 'HTTP/1.1',
+				    ConnectionManager => $cm,
 );
 
 # Create a session that will make some requests.
