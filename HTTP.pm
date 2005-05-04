@@ -38,17 +38,9 @@ BEGIN {
 use POE qw(
   Wheel::SocketFactory Wheel::ReadWrite
   Driver::SysRW Filter::Stream
-  Filter::HTTPHead;
+  Filter::HTTPHead Filter::HTTPChunk
+  Component::Client::DNS
 );
-
-BEGIN {
-  my $has_client_dns = 0;
-  eval {
-    require POE::Component::Client::DNS;
-    $has_client_dns = 1;
-  };
-  eval "sub HAS_CLIENT_DNS () { $has_client_dns }";
-}
 
 # {{{ Constants
 
@@ -68,14 +60,6 @@ sub REQ_HOST          () { 12 }
 sub REQ_PORT          () { 13 }
 sub REQ_START_TIME    () { 14 }
 sub REQ_HEAD_PARSER   () { 15 }
-
-# chunked encoding support
-sub REQ_FIRST_RESPONSE() { 16 }
-sub REQ_CHUNKED       () { 17 }
-sub REQ_BYTES         () { 18 }
-sub REQ_CHUNK_BUFFER  () { 19 }
-sub REQ_CHUNK_TOTAL   () { 20 }
-sub REQ_CHUNK_STASH   () { 21 }
 
 sub RS_CONNECT      () { 0x01 }
 sub RS_SENDING      () { 0x02 }
@@ -140,13 +124,10 @@ sub spawn {
   my $timeout = delete $params{Timeout};
   $timeout = 180 unless defined $timeout and $timeout >= 0;
 
-  # Start a DNS resolver for this agent, if we can.
-  if (HAS_CLIENT_DNS) {
-    POE::Component::Client::DNS->spawn(
+  POE::Component::Client::DNS->spawn(
       Alias   => "poco_${alias}_resolver",
       Timeout => $timeout,
     );
-  }
 
   # Accept an agent, or a reference to a list of agents.
   my $agent = delete $params{Agent};
@@ -461,12 +442,8 @@ sub poco_weeble_request {
       }
   }
 
-  # If non-blocking DNS is available, and the host was supplied as a
-  # name, then go through POE::Component::Client::DNS.  Otherwise go
-  # directly to the SocketFactory stage.  -><- Should probably check
-  # for IPv6 addresses here, too.
-
-  if (HAS_CLIENT_DNS and $host !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) {
+  # -><- Should probably check for IPv6 addresses here, too.
+  if ($host !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) {
 
       if (exists $heap->{resolve}->{$host}) {
           DEBUG and warn "DNS: $host is piggybacking on a pending lookup.\n";
@@ -685,6 +662,7 @@ sub poco_weeble_connect_ok {
     my $new_wheel = POE::Wheel::ReadWrite->new(
       Handle       => $socket,
       Driver       => POE::Driver::SysRW->new(BlockSize => $block_size),
+      #Filter       => POE::Filter::Stream->new(),
       InputFilter  => POE::Filter::HTTPHead->new(),
       OutputFilter => POE::Filter::Stream->new(),
       InputEvent   => 'got_socket_input',
@@ -873,621 +851,306 @@ sub poco_weeble_io_error {
 my $NL;
 
 sub poco_weeble_io_read {
-    my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
-    my $request_id = $heap->{wheel_to_request}->{$wheel_id};
+  my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
+  my $request_id = $heap->{wheel_to_request}->{$wheel_id};
 
-    return unless defined $request_id;
-    # die unless defined $request_id;
-    my $request = $heap->{request}->{$request_id};
+  #return unless defined $request_id;
+  die unless defined $request_id;
+  my $request = $heap->{request}->{$request_id};
 
-    DEBUG and warn "I/O: wheel $wheel_id got input...\n";
-    DEBUG_DATA and warn(_hexdump($input), "\n");
+  DEBUG and warn "I/O: wheel $wheel_id got input...\n";
+  DEBUG_DATA and warn(_hexdump($input), "\n");
 
-    # Reset the timeout if we get data.
-    $kernel->delay_adjust($request->[REQ_TIMER], $heap->{timeout});
+  # Reset the timeout if we get data.
+  $kernel->delay_adjust($request->[REQ_TIMER], $heap->{timeout});
 
-    # {{{ status line
+# {{{ status line
 
-    # The very first line ought to be status.  If it's not, then it's
-    # part of the content.
-    if ($request->[REQ_STATE] & RS_IN_STATUS) {
-	my $filter = $request->[REQ_WHEEL]->get_input_filter;
-	warn "FILTER is $filter";
-	$NL = $request->[REQ_WHEEL]->get_input_filter->[0]->[0]->[1];
-	warn "NEWLINE is $NL";
-	if (defined $input) {
-	$input->request ($request->[REQ_REQUEST]);
-	warn "INPUT for ", $request->[REQ_REQUEST]->uri, " is \n",$input->as_string;
-	} else {
-	warn "NO INPUT\n";
+  # The very first line ought to be status.  If it's not, then it's
+  # part of the content.
+  if ($request->[REQ_STATE] & RS_IN_STATUS) {
+    my $filter = $request->[REQ_WHEEL]->get_input_filter;
+    warn "FILTER is $filter";
+    $NL = $request->[REQ_WHEEL]->get_input_filter->[0]->[0]->[1];
+    warn "NEWLINE is $NL";
+    if (defined $input) {
+      $input->request ($request->[REQ_REQUEST]);
+      warn "INPUT for ", $request->[REQ_REQUEST]->uri, " is \n",$input->as_string;
+    } else {
+      warn "NO INPUT\n";
+    }
+    $request->[REQ_RESPONSE] = $input;
+    if ($request->[REQ_REQUEST]->method eq 'HEAD'
+     || $input->code =~ /^(?:1|[23]04)/) {
+      $request->[REQ_STATE] = RS_DONE;
+    } else {
+      $request->[REQ_STATE] = RS_CHK_REDIRECT;
+      my $te = $input->header('Transfer-Encoding');
+      my @te = split(/\s*,\s*/, lc($te));
+      $te = pop(@te);
+      warn "transfer encoding $te";
+      if ($te eq 'chunked') {
+	$request->[REQ_WHEEL]->set_input_filter (POE::Filter::HTTPChunk->new (Response => $input));
+      } else {
+	$request->[REQ_WHEEL]->set_input_filter (POE::Filter::Stream->new);
+      }
+    }
+    return;
+  }
+
+# }}} status line
+# {{{ redirect
+  # Edge case between RS_IN_HEADERS and RS_IN_CONTENT.  We'll see if
+  # HTML header parsing is necessary (and enable it if it is).  We'll
+  # also check for redirection, if enabled.
+
+  # Aggregate the new input.
+  $request->[REQ_BUFFER] .= $input;
+
+  if ($request->[REQ_STATE] & RS_CHK_REDIRECT) {
+  # We only go through this once per request.
+    $request->[REQ_STATE] = RS_IN_CONTENT;
+
+    # Check for redirection, if enabled. Yield request to ourselves.
+    # Prevent looping, either through maximum hops, or repeat.
+    #
+    # -><- I wonder.  Will we need to defer the redirect check until
+    # the HTML <HEAD></HEAD> section is loaded?  Headers in there may
+    # alter the response's base() result.  Would that be significant?
+    if ($request->[REQ_RESPONSE]->is_redirect() && $heap->{max_redirects}) {
+      my $uri = $request->[REQ_RESPONSE]->header('Location');
+      # Canonicalize relative URIs.
+      my $base = $request->[REQ_RESPONSE]->base();
+      $uri = URI->new($uri, $base)->abs($base);
+
+      DEBUG and warn "RED: Redirected to ".$uri."\n";
+
+      my @history = @{$heap->{redir}->{$request_id}->{hist}};
+      if (@history > 5 || grep($uri eq $_, @history)) {
+	$request->[REQ_STATE] = RS_DONE;
+	DEBUG and warn "RED: Too much redirection, moving to done\n";
+      } else { # All fine, yield new request and mark this disabled.
+	my $newrequest = $request->[REQ_REQUEST]->clone();
+	$newrequest->uri($uri);
+
+	my ($new_host, $new_port);
+	eval {
+	  $new_host = $uri->host();
+	  $new_port = $uri->port();
+	  if ($new_port == 80) {
+	    $newrequest->header( Host => $new_host );
+	  } else {
+	    $newrequest->header( Host => "$new_host:$new_port" );
+	  }
+	};
+	warn $@ if $@;
+
+	$kernel->yield(
+	    request => 'dummystate',
+	    $newrequest, "_redir_".$request_id,
+	    $request->[REQ_PROG_POSTBACK]
+	    );
+	$heap->{redir}->{$request_id}->{request} = $request->[REQ_REQUEST];
+	$heap->{redir}->{$request_id}->{followed} = 1; # Mark redirected.
+
+	  DEBUG and warn "RED: COMPLETE THE REDIRECT THE RIGHT WAY!\n"; # warn $request_id;
+	if (K) {
+	  # _remove_timeout($kernel, $heap, $request);
+	  # _finish_redirect($heap, $request_id, $request);
+	  $heap->{redir}->{$request_id}->{timeout} = $request->[REQ_TIMER];
+
+	  # _finish_request($heap, $request_id, $request);
+	  _respond($heap, $request_id, $request);
+	  $request->[REQ_STATE] = RS_DONE | RS_POSTED;
 	}
-        $request->[REQ_RESPONSE] = $input;
-        $request->[REQ_STATE] = RS_CHK_REDIRECT;
-        $request->[REQ_FIRST_RESPONSE] = 1;
-    	$request->[REQ_WHEEL]->set_input_filter (POE::Filter::Stream->new);
-	return;
+      }
     }
 
-    # }}} status line
-    # {{{ redirect
-    
-    # Edge case between RS_IN_HEADERS and RS_IN_CONTENT.  We'll see if
-    # HTML header parsing is necessary (and enable it if it is).  We'll
-    # also check for redirection, if enabled.
+    # Not a redirect.  Begin parsing headers if this is HTML.
+    else {
+      if ($request->[REQ_RESPONSE]->content_type() eq "text/html") {
+	$request->[REQ_HEAD_PARSER] = HTML::HeadParser->new(
+	    $request->[REQ_RESPONSE]->{_headers}
+	    );
+      }
 
-    # Aggregate the new input.
-    $request->[REQ_BUFFER] .= $input;
+      0 and DEBUG and do {
+	warn "server got response...\n";
+	my $http_response = $request->[REQ_RESPONSE];
 
-    if ($request->[REQ_STATE] & RS_CHK_REDIRECT) {
-        # We only go through this once per request.
-        $request->[REQ_STATE] = RS_IN_CONTENT;
+	my $response_string = $http_response->as_string();
+	$response_string =~ s/^/| /mg;
 
-        # Check for redirection, if enabled. Yield request to ourselves.
-        # Prevent looping, either through maximum hops, or repeat.
-        #
-        # -><- I wonder.  Will we need to defer the redirect check until
-        # the HTML <HEAD></HEAD> section is loaded?  Headers in there may
-        # alter the response's base() result.  Would that be significant?
-        if ($request->[REQ_RESPONSE]->is_redirect() && $heap->{max_redirects}) {
-            my $uri = $request->[REQ_RESPONSE]->header('Location');
-            # Canonicalize relative URIs.
-            my $base = $request->[REQ_RESPONSE]->base();
-            $uri = URI->new($uri, $base)->abs($base);
+	warn ",", '-' x 78, "\n";
+	warn $response_string;
+	warn "`", '-' x 78, "\n";
+      };
 
-            DEBUG and warn "RED: Redirected to ".$uri."\n";
+    }
+  }
 
-            my @history = @{$heap->{redir}->{$request_id}->{hist}};
-            if (@history > 5 || grep($uri eq $_, @history)) {
-                $request->[REQ_STATE] = RS_DONE;
-                DEBUG and warn "RED: Too much redirection, moving to done\n";
-            } else { # All fine, yield new request and mark this disabled.
-                my $newrequest = $request->[REQ_REQUEST]->clone();
-                $newrequest->uri($uri);
+# }}} redirect
+# {{{ content
 
-                my ($new_host, $new_port);
-                eval {
-                    $new_host = $uri->host();
-                    $new_port = $uri->port();
-                    if ($new_port == 80) {
-                        $newrequest->header( Host => $new_host );
-                    } else {
-                        $newrequest->header( Host => "$new_host:$new_port" );
-                    }
-                };
-                warn $@ if $@;
+  # We're in a content state.  This isn't an else clause because we
+  # may go from header to content in the same read.
+  if ($request->[REQ_STATE] & RS_IN_CONTENT) {
 
-                $kernel->yield(
-                  request => 'dummystate',
-                  $newrequest, "_redir_".$request_id,
-                  $request->[REQ_PROG_POSTBACK]
-                );
-                $heap->{redir}->{$request_id}->{request} = $request->[REQ_REQUEST];
-                $heap->{redir}->{$request_id}->{followed} = 1; # Mark redirected.
-
-                DEBUG and warn "RED: COMPLETE THE REDIRECT THE RIGHT WAY!\n"; # warn $request_id;
-                if (K) {
-                    # _remove_timeout($kernel, $heap, $request);
-                    # _finish_redirect($heap, $request_id, $request);
-                    $heap->{redir}->{$request_id}->{timeout} = $request->[REQ_TIMER];
-
-                    # _finish_request($heap, $request_id, $request);
-                    _respond($heap, $request_id, $request);
-                    $request->[REQ_STATE] = RS_DONE | RS_POSTED;
-                }
-            }
-        }
-
-        # Not a redirect.  Begin parsing headers if this is HTML.
-        else {
-            if ($request->[REQ_RESPONSE]->content_type() eq "text/html") {
-                $request->[REQ_HEAD_PARSER] = HTML::HeadParser->new(
-                  $request->[REQ_RESPONSE]->{_headers}
-                );
-            }
-
-            0 and DEBUG and do {
-                warn "server got response...\n";
-                my $http_response = $request->[REQ_RESPONSE];
-
-                my $response_string = $http_response->as_string();
-                $response_string =~ s/^/| /mg;
-
-                warn ",", '-' x 78, "\n";
-                warn $response_string;
-                warn "`", '-' x 78, "\n";
-            };
-
-        }
+    # First pass the new chunk through our HeadParser, if we have one.
+    # This also destroys the HeadParser if its purpose is done.
+    if ($request->[REQ_HEAD_PARSER]) {
+      $request->[REQ_HEAD_PARSER]->parse($request->[REQ_BUFFER]) or
+	$request->[REQ_HEAD_PARSER] = undef;
     }
 
-    # }}} redirect
-    # {{{ content
-
-    # We're in a content state.  This isn't an else clause because we
-    # may go from header to content in the same read.
-    if ($request->[REQ_STATE] & RS_IN_CONTENT) {
-
-        DEBUG_CHUNKED and warn "I/O: postback = $request->[REQ_POSTBACK]\n";
-
-        # {{{ Transfer-Encoding: chunked
-
-        # this whole section lifted wholesale from Net::HTTP::Methods,
-        # then adapted for POE.
-
-        DEBUG_CHUNKED and warn "I/O: entered content state\n";
-
-        # {{{ setup read
-
-        DEBUG_CHUNKED and warn "I/O: setup read\n";
-
-        my $chunked;
-        my $bytes;
-
-        # Establish if we're processing a Chunked response.
-        if ($request->[REQ_FIRST_RESPONSE]) {
-            $request->[REQ_FIRST_RESPONSE] = 0;
-            delete $request->[REQ_CHUNKED];
-            delete $request->[REQ_BYTES];
-            my $method = $request->[REQ_REQUEST]->method;
-            my $status = $request->[REQ_RESPONSE]->code;
-            if ($method eq "HEAD" || $status =~ /^(?:1|[23]04)/) {
-                # these responses are always empty
-                $bytes = 0;
-            }
-
-            # warn $request->[REQ_RESPONSE];
-            if (my $te = $request->[REQ_RESPONSE]->header('Transfer-Encoding')) {
-                my @te = split(/\s*,\s*/, lc($te));
-
-                die "I/O: Chunked must be last Transfer-Encoding '$te'"
-                  unless pop(@te) eq "chunked";
-
-                @te = reverse(@te);
-
-                # ${*$self}{'http_te2'} = @te ? \@te : "";
-                $chunked = -1;
-            } elsif (defined(my $content_length = $request->[REQ_RESPONSE]->content_length)) {
-
-                $bytes = $content_length;
-
-            } else {
-                # XXX Multi-Part types are self delimiting, but RFC 2616 says we
-                # only has to deal with 'multipart/byteranges'
-
-                # Read until EOF
-            }
-        } else {
-            # catch if we were short, last read.
-            $chunked = $request->[REQ_CHUNKED];
-            $bytes   = $request->[REQ_BYTES];
-
-            DEBUG_CHUNKED and warn "I/O: Resuming last read (chunked = $chunked)\n";
-        }
-
-        # TRY TO COVER THE BORDER CASE of a trailing \r\n in the
-        # chunks that preceed a chunk size (which comes in the next packet);
-        if (defined $request->[REQ_CHUNK_STASH]) {
-            $request->[REQ_BUFFER] = $request->[REQ_CHUNK_STASH] . $request->[REQ_BUFFER];
-            undef $request->[REQ_CHUNK_STASH];
-        }
-
-        # }}} setup read
-
-        my $chunk_buffer;
-        my $chunk_temp;
-
-        my $original_buffer = $request->[REQ_BUFFER];
-
-        while (defined $chunked and length $request->[REQ_BUFFER] and not $request->[REQ_BUFFER] =~ /^$NL$/) {
-            # while ($first++ < 1) {
-
-            # if we are chunked, then read the chunks
-            if (defined $chunked) {
-                # The state encoded in $chunked is:
-                #   $chunked == 0:   read CRLF after chunk, then chunk header
-                #   $chunked == -1:  read chunk header
-                #   $chunked > 0:    bytes left in current chunk to read
-
-                DEBUG_CHUNKED and warn "I/O: reading chunks (chunked = $chunked)\n";
-                DEBUG_CHUNKED and warn "BUFFER, BEFORE: ", $request->[REQ_BUFFER], length $request->[REQ_BUFFER];
-                DEBUG_CHUNKED and warn "I/O: buffer_length = ", length($request->[REQ_BUFFER]), "\n";
-
-                my $line;
-
-                if ($chunked <= 0) {
-                    # {{{ determine chunk size
-
-                    # my $original_buffer = $request->[REQ_BUFFER];
-                    # read chunk size
-                    # if ($request->[REQ_BUFFER] =~ s/^(.*?)($NL)//) {
-                    $request->[REQ_BUFFER] =~ s/^(.*?)($NL)//;
-
-		    # warn $request->[REQ_BUFFER];
-
-		    $line = $1;
-
-		    if ($chunked == 0) {
-			# {{{ error checking
-
-			DEBUG_CHUNKED and warn "I/O: Checking state (chunked=$chunked) (line=$line)\n";
-
-			DEBUG_CHUNKED and warn $original_buffer
-			  if !defined($line) || $line ne "";
-			warn "I/O: Missing newline after chunk data: '$line'"
-			  if !defined($line) || $line ne "";
-
-			# $line = my_readline($self);
-			$request->[REQ_BUFFER] =~
-			  s/^(.*?)($NL)//;
-			$line = $1;
-
-			die "I/O: EOF when chunk header expected" unless defined($line);
-
-			# }}} error checking
-		    }
-
-		    my $test = { read => $line,};
-		    # my $test =  $line;
-
-		    DEBUG_CHUNKED and warn "I/O: (read=$line)\n";
-
-		    # {{{ chunk length
-
-		    my $chunk_len = $line;
-		    $chunk_len =~ s/;.*//; # ignore potential chunk parameters
-		    warn "reported chunk len is $chunk_len";
-		    unless ($chunk_len =~ /^([\da-fA-F]+)\s*$/) {
-			DEBUG_CHUNKED and warn(
-					       "I/O: original = $original_buffer\n",
-					       "I/O: sofar    = $request->[REQ_CHUNK_BUFFER]\n",
-					       "I/O: buffer   = $request->[REQ_BUFFER]\n",
-					      );
-
-			die "I/O: Bad chunk-size in HTTP response: $line";
-			#warn "I/O: Bad chunk-size in HTTP response: $line";
-			# next;
-		    }
-		    $chunked = hex($1);
-
-		    DEBUG_CHUNKED and warn (
-					    "I/O: chunk size = $chunked\n",
-					    "I/O: buffer size = ", length($request->[REQ_BUFFER]), "\n",
-					   );
-
-                    # }}} chunk length
-
-                    # }}} determine chunk size
-
-                    if ($chunked == 0) {
-                        # {{{ last chunk of request
-
-                        DEBUG_CHUNKED and warn "I/O: got chunk size: 0";
-                        DEBUG_CHUNKED and warn "I/O: No more chunks.";
-
-                        # XXX "NO MORE CHUNKS";
-
-                        # (XXX IMPLEMENT ME!)
-                        # {{{ TRAILING HEADERS
-
-                        # ${*$self}{'http_trailers'} = [$self->_read_header_lines];
-
-                        # }}} TRAILING HEADERS
-                        # (XXX IMPLEMENT ME!)
-
-                        # (XXX IMPLEMENT ME!)
-                        # {{{ GZIP, DEFLATE, etc.
-
-                    # $$buf_ref = "";
-                    # my $n = 0;
-                    # if (my $transforms = delete ${*$self}{'http_te2'}) {
-                    #     for (@$transforms) {
-                    #        $$buf_ref = &$_($$buf_ref, 1);
-                    #     }
-                    #     $n = length($$buf_ref);
-                    # }
-
-                    # }}} GZIP, DEFLATE, etc.
-                        # (XXX IMPLEMENT ME!)
-
-                        # reset the spare chunk placeholders
-                        undef $request->[REQ_CHUNKED];
-                        $request->[REQ_BYTES] = 0;
-
-                        # DEBUG_CHUNKED and warn "I/O: remaining buffer: " # . $request->[REQ_BUFFER] . "\n";
-
-                        # stash the decoded buffer into REQ_BUFFER (processed below)
-                        DEBUG_CHUNKED and warn(
-                          "I/O: these should match:\n",
-                          "I/O:    chunk_buffer_length = ", length($request->[REQ_CHUNK_BUFFER]), "\n",
-                          "I/O:    chunk_total_octets  = $request->[REQ_CHUNK_TOTAL]\n",
-                        );
-
-                        $request->[REQ_BUFFER] = $request->[REQ_CHUNK_BUFFER];
-                        # $request->[REQ_RESPONSE]->content_length($request->[REQ_OCTETS_GOT] + length $request->[REQ_CHUNK_BUFFER]);
-                        $request->[REQ_RESPONSE]->content_length($request->[REQ_CHUNK_TOTAL]);
-
-                        # this makes the numbers below add up.
-                        $request->[REQ_OCTETS_GOT] = $request->[REQ_CHUNK_TOTAL] - length $chunk_temp;
-
-                        $chunked = undef;
-
-                        last;
-
-                        # }}} last chunk of request
-                    }
-
-                }
-
-                if ($chunked > 0) {
-
-                    # {{{ read octets from next chunk
-
-                    my $n_bytes = $chunked;
-                    # this accounts for short reads, where the
-                    # available octets in the REQ_BUFFER is less than
-                    # the remaining octets remaining in the chunk.
-                    $n_bytes = length($request->[REQ_BUFFER])
-                      if length($request->[REQ_BUFFER]) < $n_bytes;
-
-                    DEBUG_CHUNKED and warn(
-                      "I/O: short read:\n",
-                      "I/O: \$chunked = $chunked\n",
-                      "I/O: buffer length = $n_bytes\n",
-                    ) if length($request->[REQ_BUFFER]) < $chunked;
-
-                    # slight voodoo here in substr: nuke processed
-                    # substring from $request->[REQ_BUFFER], AND save
-                    # it to $chunk_temp in one step
-                    $chunk_temp = substr($request->[REQ_BUFFER], 0, $n_bytes, '');
-                    $request->[REQ_CHUNK_TOTAL] += length $chunk_temp;
-
-                    # signify the remaining bytes to read in this
-                    # chunk, for the *next* pass.
-
-                    ### XXX Should this also change the value of $chunked???
-                    # $request->[REQ_CHUNKED] = $chunked - $n_bytes;
-                    $chunked = $request->[REQ_CHUNKED] = $chunked - $n_bytes;
-                    DEBUG_CHUNKED and warn "chunk bytes remaining = $chunked\n";
-
-                    # {{{ newline trimming, not used
-
-                    # this bit is here because I kept seeing the
-                    # process READ and REMOVE the chunk octets to
-                    # process, but that was ALWAYS followed by a
-                    # newline.  I *think* this is accounted for now in
-                    # the logic above but if I decide I'm wrong, this
-                    # is the code for it.
-                    if (
-                      0 and
-                      $request->[REQ_CHUNKED] == 0
-                      and $request->[REQ_BUFFER] =~ /^$NL$/
-                    ) {
-                        DEBUG_CHUNKED and warn "I/O: BEFORE removing leading newline: $request->[REQ_BUFFER]\n";
-
-                        # $request->[REQ_BUFFER] =~ s/^..//;
-                        substr($request->[REQ_BUFFER], 0, 2, '');
-
-                        DEBUG_CHUNKED and warn "I/O: AFTER removing leading newline: $request->[REQ_BUFFER]\n";
-                        # $chunked = -1;
-                    }
-
-                    # }}} newline trimming, not used
-
-                    # {{{ TE transforms (gzip, deflate, etc)
-
-                    # if ($n > 0) {
-                    #     if (my $transforms = ${*$self}{'http_te2'}) {
-                    #         for (@$transforms) {
-                    #             $$buf_ref = &$_($$buf_ref, 0);
-                    #         }
-                    #         $n = length($$buf_ref);
-                    #         $n = -1 if $n == 0;
-                    #     }
-                    # }
-                    # return $n;
-
-                    # }}} TE transforms (gzip, deflate, etc)
-
-                    $request->[REQ_CHUNK_BUFFER] .= $chunk_temp;
-
-                    # }}} read octets from next chunk
-
-                }
-
-            } elsif (defined $bytes) {
-                # XXX
-                # XXX this is untested!
-                # XXX
-
-                #     unless ($bytes) {
-                #         $$buf_ref = "";
-                #         return 0;
-                #     }
-                if ($bytes) {
-                    my $n = $bytes;
-                    $n = length($request->[REQ_BUFFER]) if length($request->[REQ_BUFFER]) < $n;
-                    # $n = my_read($self, $$buf_ref, $n);
-                    # return undef unless defined $n;
-                    $request->[REQ_BYTES] = $bytes - $n;
-                    # return $n;
-                }
-                last
-            }
-
-        }
-
-        if ($request->[REQ_BUFFER] =~ /^$NL$/) {
-            $request->[REQ_CHUNK_STASH] = $request->[REQ_BUFFER];
-            $request->[REQ_BUFFER] = '';
-        }
-
-        # }}}  Transfer-Encoding: chunked
-
-        # First pass the new (possibly decoded) chunk through our
-        # HeadParser, if we have one.  This also destroys the
-        # HeadParser if its purpose is done.
-        if ($request->[REQ_HEAD_PARSER]) {
-            $request->[REQ_HEAD_PARSER]->parse($request->[REQ_BUFFER]) or
-              $request->[REQ_HEAD_PARSER] = undef;
-        }
-
-        # Count how many octets we've received.  -><- This may fail on
-        # perl 5.8 if the input has been identified as Unicode.  Then
-        # again, the C<use bytes> in Driver::SysRW may have untainted the
-        # data... or it may have just changed the semantics of length()
-        # therein.  If it's done the former, then we're safe.  Otherwise
-        # we also need to C<use bytes>.
-        my $this_chunk_length = length($request->[REQ_BUFFER]);
-
-        # TE: chunked
-        #
-        # The size of the last chunk we processed is considered
-        # "actual" bytes (versus number of encoded bytes)
-        if (length $chunk_temp) {
-            $this_chunk_length = length $chunk_temp;
-        }
-        $request->[REQ_OCTETS_GOT] += $this_chunk_length;
-
-
-        # We've gone over the maximum content size to return.  Chop it
-        # back.
-        if ($heap->{max_size} and $request->[REQ_OCTETS_GOT] > $heap->{max_size}) {
-	    warn "GOT MORE THAN MAX_SIZE BYTES";
-            my $over = $request->[REQ_OCTETS_GOT] - $heap->{max_size};
-            $request->[REQ_OCTETS_GOT] -= $over;
-            substr($request->[REQ_BUFFER], -$over) = "";
-        }
-
-        # If we are streaming, send the chunk back to the client session.
-        # Otherwise add the new octets to the response's content.  -><-
-        # This should only add up to content-length octets total!
-        if ($heap->{streaming}) {
-            $request->[REQ_POSTBACK]->(
-              $request->[REQ_RESPONSE], $request->[REQ_BUFFER]
-            );
-        } else {
-            $request->[REQ_RESPONSE]->add_content($request->[REQ_BUFFER]);
-        }
-
-        DEBUG and do {
-            warn "I/O: wheel $wheel_id got $this_chunk_length octets of content...\n";
-            warn(
-              "I/O: wheel $wheel_id has $request->[REQ_OCTETS_GOT]",
-               ( $request->[REQ_RESPONSE]->content_length()
-                 ? ( " out of " . $request->[REQ_RESPONSE]->content_length() )
-                 : ""
-               ),
-               " octets\n"
-            );
-        };
-
-        # Stop reading when we have enough content.  -><- Should never be
-        # greater than our content length.
-        if ( $request->[REQ_RESPONSE]->content_length() ) {
-
-            # TODO - Remove this?  Or pass the information to the user?
-            #my $progress = int( ($request->[REQ_OCTETS_GOT] * 100) /
-            #                    $request->[REQ_RESPONSE]->content_length()
-            #                  );
-
-            $request->[REQ_PROG_POSTBACK]->(
-              $request->[REQ_OCTETS_GOT],
-              $request->[REQ_RESPONSE]->content_length(),
-              $request->[REQ_BUFFER],
-            ) if $request->[REQ_PROG_POSTBACK];
-
-            if (
-              $request->[REQ_OCTETS_GOT] >= $request->[REQ_RESPONSE]->content_length()
-            ) {
-                DEBUG and
-                  warn "I/O: wheel $wheel_id has a full response... moving to done.\n";
-
-                $request->[REQ_STATE] = RS_DONE;
-
-                # KeepAlive -- now we support KeepAlives, and content
-                # is delivered independantly of connection state.
-
-                # Original note:
-                # -><- This assumes the server will now disconnect.  That will
-                # give us an error 0 (socket's closed), and we will post the
-                # response.
-
-            }
-        }
+    # Count how many octets we've received.  -><- This may fail on
+    # perl 5.8 if the input has been identified as Unicode.  Then
+    # again, the C<use bytes> in Driver::SysRW may have untainted the
+    # data... or it may have just changed the semantics of length()
+    # therein.  If it's done the former, then we're safe.  Otherwise
+    # we also need to C<use bytes>.
+    my $this_chunk_length = length($request->[REQ_BUFFER]);
+    $request->[REQ_OCTETS_GOT] += $this_chunk_length;
+
+
+    # We've gone over the maximum content size to return.  Chop it
+    # back.
+    if ($heap->{max_size} and $request->[REQ_OCTETS_GOT] > $heap->{max_size}) {
+      my $over = $request->[REQ_OCTETS_GOT] - $heap->{max_size};
+      $request->[REQ_OCTETS_GOT] -= $over;
+      substr($request->[REQ_BUFFER], -$over) = "";
     }
 
-    # }}} content
-
-    $request->[REQ_BUFFER] = '';
-
-    # {{{ not done yet?
-
-    unless ($request->[REQ_STATE] & RS_DONE) {
-
-        if (
-          defined($heap->{max_size}) and
-          $request->[REQ_OCTETS_GOT] >= $heap->{max_size}
-        ) {
-            DEBUG and
-              warn "I/O: wheel $wheel_id got enough data... moving to done.\n";
-
-            if (
-              defined($request->[REQ_RESPONSE]) and
-              defined($request->[REQ_RESPONSE]->code())
-            ) {
-                $request->[REQ_RESPONSE]->header(
-                  'X-Content-Range',
-                  'bytes 0-' . $request->[REQ_OCTETS_GOT] .
-                  ( $request->[REQ_RESPONSE]->content_length()
-                    ? ('/' . $request->[REQ_RESPONSE]->content_length())
-                    : ''
-                  )
-                );
-            } else {
-                $request->[REQ_RESPONSE] =
-                  HTTP::Response->new( 400, "Response too large (and no headers)" );
-            }
-
-            $request->[REQ_STATE] = RS_DONE;
-
-            # warn "DON'T REQUIRE ME TO DISCONNECT BEFORE I DISSEMINATE MY CONTENTS, PLEASE!";
-
-            my ($request_id, $request);
-
-            if (K) {
-                # this doesn't seem to affect anything ??
-                $request_id = $heap->{wheel_to_request}->{$wheel_id};
-                $request    = $heap->{request}->{$request_id};
-            } else {
-                # Hang up on purpose.
-                $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
-                warn "I/O: removing request $request_id";
-                $request    = delete $heap->{request}->{$request_id};
-            }
-
-            _remove_timeout($kernel, $heap, $request);
-
-            DEBUG and warn "I/O: This was orignally _respond()\n";
-            _finish_request($heap, $request_id, $request);
-            # _respond($heap, $request_id, $request);
-        }
+    # If we are streaming, send the chunk back to the client session.
+    # Otherwise add the new octets to the response's content.  -><-
+    # This should only add up to content-length octets total!
+    if ($heap->{streaming}) {
+      $request->[REQ_POSTBACK]->(
+	$request->[REQ_RESPONSE], $request->[REQ_BUFFER]
+      );
+    } else {
+      $request->[REQ_RESPONSE]->add_content($request->[REQ_BUFFER]);
     }
 
-    # }}} not done yet?
+    DEBUG and do {
+      warn "I/O: wheel $wheel_id got $this_chunk_length octets of content...\n";
+      warn(
+	  "I/O: wheel $wheel_id has $request->[REQ_OCTETS_GOT]",
+	  ( $request->[REQ_RESPONSE]->content_length()
+	    ? ( " out of " . $request->[REQ_RESPONSE]->content_length() )
+	    : ""
+	  ),
+	  " octets\n"
+	  );
+    };
 
-    # {{{ deliver reponse if complete
+    # Stop reading when we have enough content.  -><- Should never be
+    # greater than our content length.
+    if ( $request->[REQ_RESPONSE]->content_length() ) {
 
-    # POST response without disconnecting
-    if (K and $request->[REQ_STATE] & RS_DONE and not $request->[REQ_STATE] & RS_POSTED) {
-        DEBUG and warn(
-          "I/O: Calling finish_request() from 'post_finished_requests' of io_read\n",
-          "I/O: postback = $request->[REQ_POSTBACK]\n",
-        );
-        _finish_request($heap, $request_id, $request);
-        _remove_timeout($kernel, $heap, $request);
+      # TODO - Remove this?  Or pass the information to the user?
+      #my $progress = int( ($request->[REQ_OCTETS_GOT] * 100) /
+      #                    $request->[REQ_RESPONSE]->content_length()
+      #                  );
+
+      $request->[REQ_PROG_POSTBACK]->(
+	$request->[REQ_OCTETS_GOT],
+	$request->[REQ_RESPONSE]->content_length(),
+	$request->[REQ_BUFFER],
+      ) if $request->[REQ_PROG_POSTBACK];
+
+      if (
+	$request->[REQ_OCTETS_GOT] >= $request->[REQ_RESPONSE]->content_length()
+      ) {
+	DEBUG and
+	  warn "I/O: wheel $wheel_id has a full response... moving to done.\n";
+
+	$request->[REQ_STATE] = RS_DONE;
+
+	# KeepAlive -- now we support KeepAlives, and content
+	# is delivered independantly of connection state.
+
+	# Original note:
+	# -><- This assumes the server will now disconnect.  That will
+	# give us an error 0 (socket's closed), and we will post the
+	# response.
+
+      }
     }
+  }
 
-    # }}} deliver reponse if complete
+# }}} content
+
+  $request->[REQ_BUFFER] = '';
+
+# {{{ not done yet?
+
+  unless ($request->[REQ_STATE] & RS_DONE) {
+
+    if (
+	defined($heap->{max_size}) and
+	$request->[REQ_OCTETS_GOT] >= $heap->{max_size}
+       ) {
+      DEBUG and
+	warn "I/O: wheel $wheel_id got enough data... moving to done.\n";
+
+      if (
+	  defined($request->[REQ_RESPONSE]) and
+	  defined($request->[REQ_RESPONSE]->code())
+	 ) {
+	$request->[REQ_RESPONSE]->header(
+	    'X-Content-Range',
+	    'bytes 0-' . $request->[REQ_OCTETS_GOT] .
+	    ( $request->[REQ_RESPONSE]->content_length()
+	      ? ('/' . $request->[REQ_RESPONSE]->content_length())
+	      : ''
+	    )
+	    );
+      } else {
+	$request->[REQ_RESPONSE] =
+	  HTTP::Response->new( 400, "Response too large (and no headers)" );
+      }
+
+      $request->[REQ_STATE] = RS_DONE;
+
+# warn "DON'T REQUIRE ME TO DISCONNECT BEFORE I DISSEMINATE MY CONTENTS, PLEASE!";
+
+      my ($request_id, $request);
+
+      if (K) {
+# this doesn't seem to affect anything ??
+	$request_id = $heap->{wheel_to_request}->{$wheel_id};
+	$request    = $heap->{request}->{$request_id};
+      } else {
+# Hang up on purpose.
+	$request_id = delete $heap->{wheel_to_request}->{$wheel_id};
+	warn "I/O: removing request $request_id";
+	$request    = delete $heap->{request}->{$request_id};
+      }
+
+      _remove_timeout($kernel, $heap, $request);
+
+      DEBUG and warn "I/O: This was orignally _respond()\n";
+      _finish_request($heap, $request_id, $request);
+# _respond($heap, $request_id, $request);
+    }
+  }
+
+# }}} not done yet?
+
+# {{{ deliver reponse if complete
+
+# POST response without disconnecting
+  if (K and $request->[REQ_STATE] & RS_DONE and not $request->[REQ_STATE] & RS_POSTED) {
+    DEBUG and warn(
+	"I/O: Calling finish_request() from 'post_finished_requests' of io_read\n",
+	"I/O: postback = $request->[REQ_POSTBACK]\n",
+	);
+    _finish_request($heap, $request_id, $request);
+    _remove_timeout($kernel, $heap, $request);
+  }
+
+# }}} deliver reponse if complete
 
 }
 
