@@ -76,7 +76,7 @@ sub client_got_first_response {
     my $http_request  = $request_packet->[0];
     my $http_response = $response_packet->[0];
 
-    # DEBUG and WWW "client FIRST_RESPONSE: START";
+    # DEBUG and "client FIRST_RESPONSE: START";
 
     DEBUG and do {
 	warn "client got request...\n";
@@ -103,7 +103,7 @@ sub client_got_first_response {
 	}
     }
 
-    # DEBUG and WWW "client FIRST_RESPONSE: DONE";
+    # DEBUG and "client FIRST_RESPONSE: DONE";
 
 }
 
@@ -112,7 +112,7 @@ sub client_got_response {
     my $http_request  = $request_packet->[0];
     my $http_response = $response_packet->[0];
 
-    # DEBUG and WWW "client SECOND_RESPONSE: START";
+    # DEBUG and "client SECOND_RESPONSE: START";
 
     DEBUG and do {
 	warn "client got request...\n";
@@ -170,13 +170,13 @@ sub client_got_response {
 			 ) if 0 and $http_request->uri =~ /cats$/;
 
 	} elsif ($http_response->code == 404) {
-	    WWW $request_path;
+	    $request_path;
 	    $test_results[7] = 'ok 8' if $request_path =~ /ologo\.gif$/;
 
 	}
     }
 
-    # DEBUG and WWW "client SECOND_RESPONSE: DONE";
+    # DEBUG and "client SECOND_RESPONSE: DONE";
 }
 
 #------------------------------------------------------------------------------
