@@ -1,9 +1,7 @@
-BEGIN { $| = 1; print "1..2\n"; }
+use strict;
+use warnings;
 
-
-END {$got_eof ? print "ok 2\n" : print "not ok 2\n";}
-#END {$got_input ? print "ok 2\n" : print "not ok 2\n";}
-END {print "not ok 1\n" unless $loaded;}
+use Test::More tests => 2;
 
 use POE qw(
 		Wheel::ReadWrite
@@ -15,10 +13,7 @@ use POE qw(
 		Filter::XML
 	);
 
-if (defined $INC{"POE/Filter/HTTPChunk.pm"}) {
-        $loaded = 1;
-        print "ok 1\n";
-}
+ok (defined $INC{"POE/Filter/HTTPChunk.pm"}, "loaded");
 
 use IO::File;
 
@@ -31,7 +26,7 @@ my $session = POE::Session->create(
 	},
 );
 
-IO::Handle::autoflush (STDOUT, 1);
+autoflush STDOUT 1;
 $poe_kernel->run;
 
 
@@ -39,7 +34,8 @@ sub start {
 	my ($kernel, $heap) = @_[KERNEL, HEAP];
 
 	my $filter = POE::Filter::HTTPHead->new;
-	$fh = IO::File->new ("<chunked");
+	my $fh = IO::File->new_from_fd (fileno (DATA), "r");
+	$fh->seek (tell(DATA), 0);
 	$fh->autoflush;
 	
 	my $wheel = POE::Wheel::ReadWrite->new (
@@ -62,23 +58,54 @@ sub input {
 		$te = pop(@te);
 		#warn "transfer encoding $te";
 		if ($te eq 'chunked') {
-	  		$heap->{wheel}->set_filter (POE::Filter::HTTPChunk->new (Response => $response));
+	  		$heap->{wheel}->set_input_filter (POE::Filter::HTTPChunk->new);
 		} else {
-	  		$heap->{wheel}->set_filter (POE::Filter::Line->new);
+	  		$heap->{wheel}->set_input_filter (POE::Filter::Line->new);
 		}
 	  } else {
 	    #print STDERR "not a response\n";
 	  }
+	} elsif ($heap->{wheel}->get_input_filter->isa('POE::Filter::HTTPChunk')) {
+		if (UNIVERSAL::isa ($data, 'HTTP::Headers')) {
+			warn "end";
+	  		$heap->{wheel}->set_input_filter (POE::Filter::HTTPHead->new);
+		}
+		warn $data;
 	}
 }
 
 sub error {
 	my $heap = $_[HEAP];
 	my ($type, $errno, $errmsg, $id) = @_[ARG0..$#_];
-	if ($errno == 0) {
-		$got_eof = 1;
-	} else {
-		#print STDERR "$type err $errno ($errmsg) for $id\n";
-	}
+
+	is ($errno, 0, "Got EOF");
+
 	delete $heap->{wheel};
 }
+
+__DATA__
+HTTP/1.1 200 OK
+Date: Thu, 11 Nov 2004 19:43:00 GMT
+Transfer-Encoding: chunked
+Content-Type: text/plain
+
+9
+chunk one
+CRAP
+9
+chunk two
+0
+Server: Apache/1.3.31 (Unix) DAV/1.0.3 mod_gzip/1.3.26.1a PHP/4.3.5 mod_ssl/2.8.19 OpenSSL/0.9.6c
+
+HTTP/1.1 200 OK
+Date: Thu, 11 Nov 2004 19:43:00 GMT
+Server: Apache/1.3.31 (Unix) DAV/1.0.3 mod_gzip/1.3.26.1a PHP/4.3.5 mod_ssl/2.8.19 OpenSSL/0.9.6c
+Transfer-Encoding: chunked
+Content-Type: text/plain
+
+B
+chunk three
+A
+chunk four
+0
+
