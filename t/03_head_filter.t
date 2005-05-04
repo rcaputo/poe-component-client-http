@@ -1,9 +1,7 @@
-BEGIN { $| = 1; print "1..3\n"; }
+use strict;
+use warnings;
 
-
-END {$got_eof ? print "ok 3\n" : print "not ok 3\n";}
-END {$got_input ? print "ok 2\n" : print "not ok 2\n";}
-END {print "not ok 1\n" unless $loaded;}
+use Test::More tests => 7;
 
 use POE qw(
 		Wheel::ReadWrite
@@ -14,12 +12,13 @@ use POE qw(
 		Filter::XML
 	);
 
-if (defined $INC{"POE/Filter/HTTPHead.pm"}) {
-        $loaded = 1;
-        print "ok 1\n";
-}
+ok(defined $INC{"POE/Filter/HTTPHead.pm"}, "loaded");
 
+use IO::Handle;
 use IO::File;
+
+autoflush STDOUT 1;
+my $request_number = 7;
 
 my $session = POE::Session->create(
 	inline_states => {
@@ -30,7 +29,6 @@ my $session = POE::Session->create(
 	},
 );
 
-IO::Handle::autoflush (STDOUT, 1);
 $poe_kernel->run;
 
 
@@ -38,7 +36,8 @@ sub start {
 	my ($kernel, $heap) = @_[KERNEL, HEAP];
 
 	my $filter = POE::Filter::HTTPHead->new;
-	$fh = IO::File->new ("<foo");
+	my $fh = IO::File->new_from_fd (fileno (DATA), "r");
+	$fh->seek (tell(DATA), 0);
 	$fh->autoflush;
 	
 	my $wheel = POE::Wheel::ReadWrite->new (
@@ -52,25 +51,87 @@ sub start {
 }
 
 sub input {
-	my ($kernel, $heap, $data) = @_[KERNEL, HEAP, ARG0];
-	#print STDERR "got input $data\n";
-	if ($heap->{wheel}->get_input_filter->isa('POE::Filter::HTTPHead')) {
-	  if (UNIVERSAL::isa ($data, 'HTTP::Response')) {
-	  	$got_input = 1;
-	  } else {
-	    #print STDERR "not a response\n";
-	  }
-	  $heap->{wheel}->set_filter (POE::Filter::Line->new);
-	}
+  my ($kernel, $heap, $data) = @_[KERNEL, HEAP, ARG0];
+  if ($heap->{wheel}->get_input_filter->isa('POE::Filter::Line')) {
+    $request_number == 2 and is($data, 'content', "Got content foo");
+    #$request_number == 1 and is($data, 'contents', "Got content bar");
+    $heap->{wheel}->set_input_filter(POE::Filter::HTTPHead->new);
+  }
+  $request_number--;
+
+  $request_number == 6 and isa_ok ($data, 'HTTP::Response', "Got our object");
+  $request_number == 5 and ok(!defined($data), "Got a bad request");
+  $request_number == 4 and
+    ok(!defined($data->header('Connection')),
+	"Not picking up bad request headers");
+  $request_number == 3 and isa_ok ($data, 'HTTP::Response', "No HTTP version");
+  if ($request_number <= 2) {
+    $heap->{wheel}->set_filter (POE::Filter::Line->new);
+  }
 }
 
 sub error {
 	my $heap = $_[HEAP];
 	my ($type, $errno, $errmsg, $id) = @_[ARG0..$#_];
-	if ($errno == 0) {
-		$got_eof = 1;
-	} else {
-		#print STDERR "$type err $errno ($errmsg) for $id\n";
-	}
+
+	is($errno, 0, "got EOF");
 	delete $heap->{wheel};
 }
+
+# below is a list of the heads of HTTP responses (i.e with no content)
+# these are used to drive the tests.
+# Note that the last one does have a line of content, so we get more
+# coverage because we switch filters for it
+# If you want to add a head to test, put it as the first one,
+# and add a $response_number == n and ok(1, foo) statement to the
+# input subroutine n should be the number $response_number gets
+# initialized to right now. Then increase the initialization and
+# the number of tests planned.
+
+__DATA__
+HTTP/1.1 200 Ok
+Date: Mon, 08 Nov 2004 21:37:20 GMT
+Server: Apache/2.0.50 (Debian GNU/Linux) DAV/2 SVN/1.0.1-dev mod_ssl/2.0.50 OpenSSL/0.9.7d
+Last-Modified: Sat, 24 Nov 2001 16:48:12 GMT
+ETag: "6e-100e-18d96b00"
+Accept-Ranges: bytes
+Content-Length: 4110
+Connection: close
+Content-Type: text/html;
+        charset=ISO-8859-1
+
+garble
+HTTP/1.1 200 Ok
+Date: Mon, 08 Nov 2004 21:37:20 GMT
+Server: Apache/2.0.50 (Debian GNU/Linux) DAV/2 SVN/1.0.1-dev mod_ssl/2.0.50 OpenSSL/0.9.7d
+Last-Modified: Sat, 24 Nov 2001 16:48:12 GMT
+ETag: "6e-100e-18d96b00"
+Accept-Ranges: bytes
+Content-Length: 4110
+Connection close
+Content-Type: text/html;
+        charset=ISO-8859-1
+
+200 Ok
+Date: Mon, 08 Nov 2004 21:37:20 GMT
+Server: Apache/2.0.50 (Debian GNU/Linux) DAV/2 SVN/1.0.1-dev mod_ssl/2.0.50 OpenSSL/0.9.7d
+Last-Modified: Sat, 24 Nov 2001 16:48:12 GMT
+ETag: "6e-100e-18d96b00"
+Accept-Ranges: bytes
+Content-Length: 4110
+Connection: close
+Content-Type: text/html;
+        charset=ISO-8859-1
+
+HTTP/1.1 200 Ok
+Date: Mon, 08 Nov 2004 21:37:20 GMT
+Server: Apache/2.0.50 (Debian GNU/Linux) DAV/2 SVN/1.0.1-dev mod_ssl/2.0.50 OpenSSL/0.9.7d
+Last-Modified: Sat, 24 Nov 2001 16:48:12 GMT
+ETag: "6e-100e-18d96b00"
+Accept-Ranges: bytes
+Content-Length: 4110
+Connection: close
+Content-Type: text/html;
+        charset=ISO-8859-1
+
+content
