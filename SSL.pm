@@ -1,4 +1,4 @@
-# $Id$
+# $Id: SSL.pm,v 1.5 2003/10/19 20:01:55 rcaputo Exp $
 # License and documentation are after __END__.
 
 package POE::Component::Client::HTTP::SSL;
@@ -6,7 +6,7 @@ package POE::Component::Client::HTTP::SSL;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = (qw($Revision$ ))[1];
+$VERSION = (qw($Revision: 1.5 $ ))[1];
 
 use Net::SSLeay::Handle;
 use vars qw(@ISA);

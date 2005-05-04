@@ -1,4 +1,4 @@
-# $Id$
+# $Id: HTTP.pm,v 1.58 2004/10/02 15:37:11 rcaputo Exp $
 # License and documentation are after __END__.
 
 package POE::Component::Client::HTTP;
