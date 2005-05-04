@@ -26,7 +26,6 @@ sub REQ_HOST          () { 12 }
 sub REQ_PORT          () { 13 }
 sub REQ_HISTORY       () { 14 }
 sub REQ_START_TIME    () { 15 }
-sub REQ_HEAD_PARSER   () { 16 }
 
 sub RS_CONNECT      () { 0x01 }
 sub RS_SENDING      () { 0x02 }
@@ -48,7 +47,6 @@ sub import {
 	REQ_ID REQ_POSTBACK REQ_CONNECTION REQ_REQUEST REQ_STATE REQ_RESPONSE
 	REQ_BUFFER REQ_LAST_HEADER REQ_OCTETS_GOT REQ_TIMER REQ_PROG_POSTBACK
 	REQ_USING_PROXY REQ_HOST REQ_PORT REQ_HISTORY REQ_START_TIME
-	REQ_HEAD_PARSER
 		    )) {
 	no strict 'refs';
 	*{$package . "::$sub"} = \&$sub;
@@ -141,7 +139,6 @@ sub new {
     $port,              # REQ_PORT
     undef,		# REQ_HISTORY
     time(),             # REQ_START_TIME
-    undef,              # REQ_HEAD_PARSER
    ];
    return bless $self, $class;
 }

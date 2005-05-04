@@ -423,14 +423,6 @@ sub poco_weeble_io_read {
   # may go from header to content in the same read.
   if ($request->[REQ_STATE] & RS_IN_CONTENT) {
 
-
-    # First pass the new chunk through our HeadParser, if we have one.
-    # This also destroys the HeadParser if its purpose is done.
-    if ($request->[REQ_HEAD_PARSER]) {
-      $request->[REQ_HEAD_PARSER]->parse($request->[REQ_BUFFER]) or
-	$request->[REQ_HEAD_PARSER] = undef;
-    }
-
     # Count how many octets we've received.  -><- This may fail on
     # perl 5.8 if the input has been identified as Unicode.  Then
     # again, the C<use bytes> in Driver::SysRW may have untainted the
