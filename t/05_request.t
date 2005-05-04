@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 6;
+use Test::More tests => 7;
 
 use POE::Component::Client::HTTP::Request;
 use HTTP::Request;
@@ -23,8 +23,11 @@ like($@, qr/must be a HTTP::Request/, "Request parameter");
 #like($@, qr/need a Tag/, "Tag parameter");
 
 eval {POE::Component::Client::HTTP::Request->new (Request => HTTP::Request->new (GET => 'file:///localhost/'))};
+like($@, qr/need a Factory/, "Factory parameter");
+
+eval {POE::Component::Client::HTTP::Request->new (Request => HTTP::Request->new (GET => 'file:///localhost/'), Factory => 1)};
 like($@, qr/Can't locate object method "port"/, "Appropriate Request");
 
-my $r = POE::Component::Client::HTTP::Request->new (Request => HTTP::Request->new (GET => 'http://localhost/'));
+my $r = POE::Component::Client::HTTP::Request->new (Request => HTTP::Request->new (GET => 'http://localhost/'), Factory => 1);
 
 isa_ok ($r, 'POE::Component::Client::HTTP::Request');
