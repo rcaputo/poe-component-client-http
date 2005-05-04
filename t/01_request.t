@@ -38,7 +38,7 @@ sub client_start {
   DEBUG and warn "client starting...\n";
 
   $kernel->post( weeble => request => got_response =>
-                 GET 'http://poe.perl.org/misc/test.html'
+                 GET 'http://poe.perl.org/misc/test.html', Connection => 'close'
                );
 
   $kernel->post( weeble => request => got_response =>
@@ -47,18 +47,20 @@ sub client_start {
                      cgi_field_two => '222',
                      cgi_field_six => '666',
                      cgi_field_ten => 'AAA',
-                   ]
+                   ] # , Connection => 'close',
                  )
                );
 
+
   $kernel->post( weeble => request => got_response =>
-                 GET 'http://poe.perl.org/misc/test.cgi?cgi_field_fiv=555',
+                 GET 'http://poe.perl.org/misc/test.cgi?cgi_field_fiv=555', Connection => 'close'
                );
+
 
   if (HAS_SSL) {
     my $secure_request = GET 'https://sourceforge.net/projects/poe/';
     $kernel->post( weeble => request => got_response =>
-                   $secure_request,
+                   $secure_request, Connection => 'close'
                  );
   }
   else {
@@ -66,23 +68,24 @@ sub client_start {
   }
 
   $kernel->post( weeble => request => got_response =>
-                 GET 'http://poe.perl.org',
+                 GET 'http://poe.perl.org', Connection => 'close'
                );
 
   $kernel->post( weeble => request => got_response =>
-                 GET 'http://foo.poe.perl.org/'
+                 GET 'http://foo.poe.perl.org/', Connection => 'close'
                );
 
   $kernel->post( weeble => request => got_big_response =>
-                 GET 'http://poe.perl.org/misc/stream-test.cgi'
+                 GET 'http://poe.perl.org/misc/stream-test.cgi', Connection => 'close'
                );
 
   $kernel->post( streamer => request => got_stream_response =>
-                 GET 'http://poe.perl.org/misc/stream-test.cgi'
+                 GET 'http://poe.perl.org/misc/stream-test.cgi', Connection => 'close'
                );
 
+
   $kernel->post( redirector => request => got_redir_response =>
-                 GET 'http://poe.perl.org/misc/redir-test.cgi'
+                 GET 'http://poe.perl.org/misc/redir-test.cgi', Connection => 'close'
                );
 
   $kernel->yield('check_counts', 9, (HAS_SSL ? 7 : 6));
@@ -164,7 +167,9 @@ sub client_got_big_response {
        ($http_response->code == 200) and
        (length($http_response->content()) == MAX_BIG_REQUEST_SIZE)
      ) {
-    $test_results[6] = 'ok 7';
+      $test_results[6] = 'ok 7';
+  } else {
+      warn "WARNING!!!", length($http_response->content());
   }
 }
 
@@ -267,7 +272,8 @@ sub client_got_stream_response {
 # Create a weeble component.
 POE::Component::Client::HTTP->spawn(
   MaxSize => MAX_BIG_REQUEST_SIZE,
-  Timeout => 180,
+  Timeout => 10,
+  Protocol => 'HTTP/1.1',
 );
 
 # Create one for streaming.
@@ -280,6 +286,7 @@ POE::Component::Client::HTTP->spawn(
 POE::Component::Client::HTTP->spawn(
   FollowRedirects => 5,
   Alias           => "redirector",
+  Protocol => 'HTTP/1.1',
 );
 
 # Create a session that will make some requests.
