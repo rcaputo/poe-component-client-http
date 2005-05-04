@@ -11,6 +11,7 @@ sub PROTOCOL_VERSION () { 3 }
 sub STATE_STATUS () { 0x00 }  # waiting for a status line
 sub STATE_HEADER () { 0x02 }  # gotten status, looking for header or end
 
+sub DEBUG () { 0 }
 
 sub new {
   my $type = shift;
@@ -40,9 +41,9 @@ sub get_one {
 
   #warn "in get_one";
   while (defined (my $line = shift (@{$self->[FRAMING_BUFFER]}))) {
-      #warn "LINE $line";
+      DEBUG and warn "LINE $line";
       if ($self->[CURRENT_STATE] == STATE_STATUS) {
-	 #warn "in status";
+	 DEBUG and warn "in status";
 	 #expect a status line
 	 if ($line =~ m|^(?:HTTP/(\d+\.\d+) )?(\d{3})(?: (.+))?$|) {
 	    $self->[PROTOCOL_VERSION] = $1
@@ -56,15 +57,15 @@ sub get_one {
       } else {
 	 if ($line eq '') {
 	    $self->[CURRENT_STATE] = STATE_STATUS;
-	    #warn "return response";
+	    DEBUG and warn "return response";
 	    return [$self->[WORK_RESPONSE]];
 	 }
-	 #warn "in headers";
+	 DEBUG and warn "in headers";
 	 unless (@{$self->[FRAMING_BUFFER]} > 0) {
 	    unshift (@{$self->[FRAMING_BUFFER]}, $line);
 	    return [];
 	 }
-	 #warn "got more lines";
+	 DEBUG and warn "got more lines";
 	 while ($self->[FRAMING_BUFFER]->[0] =~ /^[\t ]/) {
 	    my $next_line = shift (@{$self->[FRAMING_BUFFER]});
 	    $next_line =~ s/^[\t ]+//;
