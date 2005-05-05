@@ -5,7 +5,7 @@ package POE::Component::Client::HTTP;
 use strict;
 #use bytes; # for utf8 compatibility
 
-sub DEBUG         () { 1 }
+sub DEBUG         () { 0 }
 sub DEBUG_DATA    () { 0 }
 
 use vars qw($VERSION);
@@ -643,7 +643,7 @@ sub _remove_timeout {
     my ($kernel, $heap, $request) = @_;
     # Stop the timeout timer for this wheel, too.
     my $alarm_id = $request->[REQ_TIMER];
-    warn "I/O: checking for $alarm_id";
+    DEBUG and warn "I/O: checking for $alarm_id";
     $kernel->alarm_remove( $alarm_id );
 }
 
