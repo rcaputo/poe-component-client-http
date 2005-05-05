@@ -8,7 +8,7 @@ use Carp;
 # Unique request ID, independent of wheel and timer IDs.
 my $request_seq = 0;
 
-sub DEBUG () { 1 }
+sub DEBUG () { 0 }
 
 sub REQ_ID            () {  0 }
 sub REQ_POSTBACK      () {  1 }
