@@ -26,9 +26,6 @@ sub new {
   $self;
 }
 
-sub get {
-}
-
 sub get_one_start {
   my ($self, $chunks) = @_;
 
@@ -80,6 +77,8 @@ sub get_one {
   return [];
 }
 
+=for future
+
 sub put {
   my ($self, $responses) = @_;
   my $out;
@@ -91,6 +90,8 @@ sub put {
   $out;
 }
 
+=cut
+
 sub get_pending {
   my $self = shift;
   return $self->[FRAMING_BUFFER];
@@ -98,6 +99,26 @@ sub get_pending {
 
 package POE::Filter::HTTPHead;
 use strict;
+
+=head1 NAME
+
+POE::Filter::HTTPHead - filter data as HTTP::Response objects
+
+=head1 SYNOPSYS
+
+       $filter = POE::Filter::HTTPHead->new();
+        $arrayref_of_response_objects =
+               $filter->get($arrayref_of_raw_chunks_from_driver);
+
+       $arrayref_of_leftovers = $filter->get_pending();
+
+=head1 DESCRIPTION
+
+The HTTPHead filter turns stream data that has the appropriate format
+into a HTTP::Response object. In an all-POE world, this would sit on
+the other end of a connection as L<POE::Filter::HTTPD>
+
+=cut
 
 use vars qw($VERSION);
 $VERSION = '0.01';
@@ -117,6 +138,12 @@ sub new {
   return bless $self, $type;
 }
 
+=head1 METHODS
+
+See L<POE::Filter> for documentation of the public API.
+
+=cut
+
 sub get_pending {
   my $self = shift;
 
@@ -127,10 +154,14 @@ sub get_pending {
   return \@pending;
 }
 
+=for future?
+
 sub put {
   my $self = shift;
 
   return $self->[0]->[1]->put (@_);
 }
+
+=cut
 
 1;
