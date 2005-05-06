@@ -3,7 +3,9 @@ use strict;
 use warnings;
 
 use POE;
+
 use Carp;
+use HTTP::Status;
 
 # Unique request ID, independent of wheel and timer IDs.
 my $request_seq = 0;
@@ -325,7 +327,6 @@ sub error {
   my $nl = "\n";
 
   my $r = HTTP::Response->new($code);
-  use HTTP::Status;
   my $http_msg = status_message ($code);
   my $m = "<html>$nl"
       .	  "<HEAD><TITLE>Error: $http_msg</TITLE></HEAD>$nl"
@@ -346,7 +347,7 @@ sub connect_error {
   my $port = $self->[REQ_PORT];
 
   $message = "Cannon connect to $host:$port ($message)";
-  $self->error (500, $message);
+  $self->error (RC_INTERNAL_SERVER_ERROR, $message);
   return;
 }
 
