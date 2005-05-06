@@ -326,13 +326,16 @@ sub poco_weeble_io_error {
         # Otherwise the remote end simply closed.  If we've got a
         # pending response, then post it back to the client.
 	DEBUG and warn "STATE is ", $request->[REQ_STATE];
+	# except when we're redirected
+	return if ($request->[REQ_STATE] == RS_REDIRECTED;
         if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and not $request->[REQ_STATE] & RS_POSTED) {
 
             _finish_request($heap, $request, 0);
 
             return;
         } elsif ($request->[REQ_STATE] & RS_POSTED) {
-            DEBUG and warn "I/O: Disconnect, keepalive timeout or HTTP/1.0.";
+            DEBUG and
+		warn "I/O: Disconnect, remote keepalive timeout or HTTP/1.0.";
             return;
         }
 
@@ -369,8 +372,6 @@ sub poco_weeble_io_read {
   # The very first line ought to be status.  If it's not, then it's
   # part of the content.
   if ($request->[REQ_STATE] & RS_IN_HEAD) {
-    my $filter = $request->wheel->get_input_filter;
-    #warn "FILTER is $filter";
     if (defined $input) {
       $input->request ($request->[REQ_REQUEST]);
       #warn "INPUT for ", $request->[REQ_REQUEST]->uri, " is \n",$input->as_string;
@@ -390,8 +391,14 @@ sub poco_weeble_io_read {
     } else {
       $request->[REQ_STATE] = RS_IN_CONTENT;
       if (my $newrequest = $request->check_redirect) {
+	#FIXME: probably want to find out when the content from this
+	#       request is in, and only then do the new request, so we
+	#       can reuse the connection.
+	DEBUG and warn "Redirected $request_id ", $input->code;
 	$kernel->yield (request => $request,
 	  $newrequest, "_redir_".$request->ID, $request->[REQ_PROG_POSTBACK]);
+	$request->[REQ_STATE] = RS_REDIRECTED;
+	return
       }
 
       my $filter;

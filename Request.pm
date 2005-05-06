@@ -31,6 +31,7 @@ sub REQ_FACTORY       () { 16 }
 sub RS_CONNECT      () { 0x01 }
 sub RS_SENDING      () { 0x02 }
 sub RS_IN_HEAD      () { 0x04 }
+sub RS_REDIRECTED   () { 0x08 }
 sub RS_IN_CONTENT   () { 0x20 }
 sub RS_DONE         () { 0x40 }
 sub RS_POSTED       () { 0x80 }
