@@ -2,12 +2,18 @@
 CHANGES
 CHANGES.OLD
 HTTP.pm
+HTTPChunk.pm
 HTTPHead.pm
 MANIFEST
 META.yml                                 Module meta-data (added by MakeMaker)
 Makefile.PL
 README
 mylib/ExtUtils/AutoInstall.pm
+Request.pm
+RequestFactory.pm
 t/01_request.t
 t/02_keepalive.t
 t/03_head_filter.t
+t/04_chunk_filter.t
+t/05_request.t
+t/06_factory.t

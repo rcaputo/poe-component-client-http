@@ -10,11 +10,11 @@ use ExtUtils::AutoInstall;
 open(CHANGES, ">>CHANGES") and close CHANGES;
 
 my %prereq = (
-  'POE'            => 0.27,
-  'HTTP::Request'  => 1.30,
-  'HTTP::Response' => 1.37,
-  'URI'            => 1.24,
-  'HTML::Parser'   => 3.33,  # For HTML::HeadParser
+  'POE'					=> 0.31,
+  'HTTP::Request'			=> 1.30,
+  'HTTP::Response'			=> 1.37,
+  'URI'					=> 1.24,
+  'POE::Component::Client::Keepalive'	=> 0.02,
 );
 
 # Prompt for optional things.

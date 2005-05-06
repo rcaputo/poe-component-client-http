@@ -17,7 +17,6 @@ use Symbol qw(gensym);
 use HTTP::Response;
 use HTTP::Status qw(status_message);
 use URI;
-use HTML::HeadParser;
 
 use POE::Component::Client::HTTP::RequestFactory;
 use POE::Component::Client::HTTP::Request qw(:states :fields);
