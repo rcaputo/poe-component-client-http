@@ -54,7 +54,7 @@ sub import {
     }
     if ($tag eq ':states') {
       foreach my $sub (qw(
-	RS_CONNECT RS_SENDING RS_IN_HEAD
+	RS_CONNECT RS_SENDING RS_IN_HEAD RS_REDIRECTED
 	RS_IN_CONTENT RS_DONE RS_POSTED
 		    )) {
 	no strict 'refs';

@@ -327,7 +327,7 @@ sub poco_weeble_io_error {
         # pending response, then post it back to the client.
 	DEBUG and warn "STATE is ", $request->[REQ_STATE];
 	# except when we're redirected
-	return if ($request->[REQ_STATE] == RS_REDIRECTED;
+	return if ($request->[REQ_STATE] == RS_REDIRECTED);
         if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and not $request->[REQ_STATE] & RS_POSTED) {
 
             _finish_request($heap, $request, 0);
