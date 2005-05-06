@@ -30,9 +30,7 @@ sub REQ_FACTORY       () { 16 }
 
 sub RS_CONNECT      () { 0x01 }
 sub RS_SENDING      () { 0x02 }
-sub RS_IN_STATUS    () { 0x04 }
-sub RS_IN_HEADERS   () { 0x08 } # not used anymore
-sub RS_CHK_REDIRECT () { 0x10 } # not used anymore
+sub RS_IN_HEAD      () { 0x04 }
 sub RS_IN_CONTENT   () { 0x20 }
 sub RS_DONE         () { 0x40 }
 sub RS_POSTED       () { 0x80 }
@@ -55,7 +53,7 @@ sub import {
     }
     if ($tag eq ':states') {
       foreach my $sub (qw(
-	RS_CONNECT RS_SENDING RS_IN_STATUS RS_IN_HEADERS RS_CHK_REDIRECT
+	RS_CONNECT RS_SENDING RS_IN_HEAD
 	RS_IN_CONTENT RS_DONE RS_POSTED
 		    )) {
 	no strict 'refs';
