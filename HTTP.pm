@@ -503,14 +503,10 @@ sub _finish_request {
   # If we're streaming, the response is HTTP::Response without
   # content and undef to signal the end of the stream.  Otherwise
   # it's the entire HTTP::Response object we've carefully built.
-  if ($heap->{factory}->is_streaming) {
-    $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE], undef);
-  } else {
-    $request->[REQ_POSTBACK]->($request->[REQ_RESPONSE]);
-  }
+  $request->return_response;
 
   # KeepAlive: added the RS_POSTED flag
-  $request->[REQ_STATE] = RS_DONE | RS_POSTED;
+  $request->[REQ_STATE] |= RS_POSTED;
 
   my $wheel_id = $request->wheel->ID;
   DEBUG and warn "Wheel from request is ", $wheel_id;
