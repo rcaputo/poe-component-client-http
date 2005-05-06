@@ -367,6 +367,10 @@ sub poco_weeble_io_read {
   # Reset the timeout if we get data.
   $kernel->delay_adjust($request->timer, $heap->{factory}->timeout);
 
+  if ($request->[REQ_STATE] == RS_REDIRECTED) {
+    DEBUG and warn "input for request that was redirected";
+    return;
+  }
 # {{{ HEAD
 
   # The very first line ought to be status.  If it's not, then it's
