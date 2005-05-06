@@ -355,7 +355,7 @@ sub check_redirect {
   }
 
   if ($history > 5) {
-    $self->[REQ_STATE] = RS_DONE;
+    $self->[REQ_STATE] |= RS_DONE;
     DEBUG and warn "RED: Too much redirection, moving to done\n";
   } else { # All fine, yield new request and mark this disabled.
     my $newrequest = $self->[REQ_REQUEST]->clone();
