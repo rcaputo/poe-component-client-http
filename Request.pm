@@ -79,6 +79,9 @@ sub new {
 
 
   croak "need a Request parameter" unless (defined $params{'Request'});
+  croak "Request must be a HTTP::Request object"
+      unless (UNIVERSAL::isa ($params{'Request'}, "HTTP::Request"));
+
   #croak "need a Tag parameter" unless (defined $params{'Tag'});
 
   my ($http_request, $postback, $tag, $progress) =
@@ -95,10 +98,7 @@ sub new {
     $port   = $http_request->uri()->port();
     $scheme = $http_request->uri()->scheme();
   };
-  if ($@) {
-    warn $@;
-    return;
-  }
+  croak "Not a usable Request: $@" if ($@);
 
   # Add a host header if one isn't included.  Must do this before
   # we reset the $host for the proxy!
