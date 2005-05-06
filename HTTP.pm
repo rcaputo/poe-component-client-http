@@ -57,9 +57,6 @@ sub spawn {
   my $alias = delete $params{Alias};
   $alias = 'weeble' unless defined $alias and length $alias;
 
-  my $timeout = delete $params{Timeout};
-  $timeout = 180 unless defined $timeout and $timeout >= 0;
-
   my $cm = delete $params{ConnectionManager};
 
   my $request_factory = POE::Component::Client::HTTP::RequestFactory->new (\%params);
@@ -93,7 +90,6 @@ sub spawn {
     },
     heap => {
       alias         => $alias,
-      timeout       => $timeout,
       factory	    => $request_factory,
       cm	    => $cm,
     },
@@ -113,7 +109,7 @@ sub poco_weeble_start {
 
   # have to do this here because it wants a current_session
   $heap->{cm} = POE::Component::Client::Keepalive->new(
-      timeout => $heap->{timeout},
+      timeout => $heap->{factory}->timeout,
     ) unless ($heap->{cm});
 }
 
@@ -197,7 +193,7 @@ sub poco_weeble_connect_done {
 
     $request->[REQ_CONNECTION] = $connection;
 
-    $request->create_timer ($heap->{timeout});
+    $request->create_timer ($heap->{factory}->timeout);
     $request->send_to_wheel;
   } else {
     DEBUG and
@@ -362,7 +358,7 @@ sub poco_weeble_io_read {
   DEBUG and warn "REQUEST is $request";
 
   # Reset the timeout if we get data.
-  $kernel->delay_adjust($request->[REQ_TIMER], $heap->{timeout});
+  $kernel->delay_adjust($request->[REQ_TIMER], $heap->{factory}->timeout);
 
 # {{{ HEAD
 

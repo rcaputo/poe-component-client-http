@@ -17,6 +17,7 @@ sub FCT_FROM            () {  5 }
 sub FCT_NOPROXY         () {  6 }
 sub FCT_PROXY           () {  7 }
 sub FCT_FOLLOWREDIRECTS () {  8 }
+sub FCT_TIMEOUT         () {  9 }
 
 our $VERSION = "0.01";
 sub DEBUG () { 0 }
@@ -59,6 +60,7 @@ sub new {
   my $no_proxy         = delete $params->{NoProxy};
   my $proxy            = delete $params->{Proxy};
   my $follow_redirects = delete $params->{FollowRedirects};
+  my $timeout          = delete $params->{Timeout};
 
   # Process HTTP_PROXY and NO_PROXY environment variables.
 
@@ -90,6 +92,8 @@ sub new {
     }
   }
 
+  $timeout = 180 unless (defined $timeout and $timeout > 0);
+
   my $self = [
     $agent,            # FCT_AGENT
     $streaming,        # FCT_STREAMING
@@ -100,9 +104,19 @@ sub new {
     $no_proxy,         # FCT_NOPROXY
     $proxy,            # FCT_PROXY
     $follow_redirects, # FCT_FOLLOWREDIRECTS
+    $timeout,          # FCT_TIMEOUT
   ];
 
   return bless $self, $class;
+}
+
+sub timeout {
+  my ($self, $timeout) = @_;
+
+  if (defined $timeout) {
+    $self->[FCT_TIMEOUT] = $timeout;
+  }
+  return $self->[FCT_TIMEOUT];
 }
 
 sub is_streaming {
