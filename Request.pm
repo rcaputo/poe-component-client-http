@@ -341,23 +341,11 @@ sub error {
 sub connect_error {
   my ($self, $message) = @_;
 
-  my $nl = "\n";
-
   my $host = $self->[REQ_HOST];
   my $port = $self->[REQ_PORT];
 
-  my $response = HTTP::Response->new(500);
-  $response->content(
-    "<HTML>$nl" .
-    "<HEAD><TITLE>An Error Occurred</TITLE></HEAD>$nl" .
-    "<BODY>$nl" .
-    "<H1>An Error Occurred</H1>$nl" .
-    "500 Cannot connect to $host:$port ($message)$nl" .
-    "</BODY>$nl" .
-    "</HTML>$nl"
-  );
-
-  $self->[REQ_POSTBACK]->($response);
+  $message = "Cannon connect to $host:$port ($message)";
+  $self->error (500, $message);
   return;
 }
 
