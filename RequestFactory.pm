@@ -34,7 +34,7 @@ sub new {
   # Accept an agent, or a reference to a list of agents.
   my $agent = delete $params->{Agent};
   $agent = [] unless defined $agent;
-  if (ref($agent) eq "") {
+  if (!ref($agent)) {
     $agent = [ $agent ];
   }
   unless (ref($agent) eq "ARRAY") {
