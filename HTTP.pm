@@ -891,7 +891,11 @@ POE::Component::Client::HTTP is
 
 =item
 
-Copyright 1999-2002 Rocco Caputo.
+Copyright 1999-2005 Rocco Caputo
+
+=item
+
+Copyright 2004 Rob Bloodgood
 
 =item
 
