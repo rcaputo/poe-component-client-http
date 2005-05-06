@@ -35,13 +35,12 @@ $poe_kernel->run;
 sub start {
 	my ($kernel, $heap) = @_[KERNEL, HEAP];
 
+	sysseek(DATA, tell(DATA), 0);
+
 	my $filter = POE::Filter::HTTPHead->new;
-	my $fh = IO::File->new_from_fd (fileno (DATA), "r");
-	$fh->seek (tell(DATA), 0);
-	$fh->autoflush;
-	
+
 	my $wheel = POE::Wheel::ReadWrite->new (
-		Handle => $fh,
+		Handle => \*DATA,
 		Driver => POE::Driver::SysRW->new (BlockSize => 1000),
 		InputFilter => $filter,
 		InputEvent => 'input',
@@ -52,6 +51,7 @@ sub start {
 
 sub input {
   my ($kernel, $heap, $data) = @_[KERNEL, HEAP, ARG0];
+	warn $data;
   if ($heap->{wheel}->get_input_filter->isa('POE::Filter::Line')) {
     $request_number == 2 and is($data, 'content', "Got content foo");
     #$request_number == 1 and is($data, 'contents', "Got content bar");

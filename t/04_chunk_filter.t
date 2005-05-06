@@ -34,12 +34,11 @@ sub start {
 	my ($kernel, $heap) = @_[KERNEL, HEAP];
 
 	my $filter = POE::Filter::HTTPHead->new;
-	my $fh = IO::File->new_from_fd (fileno (DATA), "r");
-	$fh->seek (tell(DATA), 0);
-	$fh->autoflush;
+
+	sysseek(DATA, tell(DATA), 0);
 	
 	my $wheel = POE::Wheel::ReadWrite->new (
-		Handle => $fh,
+		Handle => \*DATA,
 		Driver => POE::Driver::SysRW->new (BlockSize => 100),
 		InputFilter => $filter,
 		InputEvent => 'input',
