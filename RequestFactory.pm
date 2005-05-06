@@ -7,6 +7,7 @@ use warnings;
 
 use Carp;
 use POE::Component::Client::HTTP::Request qw(:states :fields);
+use POE::Component::Client::HTTP;
 
 sub FCT_AGENT           () {  0 }
 sub FCT_STREAMING       () {  1 }
@@ -40,11 +41,12 @@ sub new {
     croak "Agent must be a scalar or a reference to a list of agent strings";
   }
 
+  my $v = $POE::Component::Client::HTTP::VERSION;
   push(
     @$agent,
     sprintf(
       'POE-Component-Client-HTTP/%s (perl; N; POE; en; rv:%f)',
-      $VERSION, $VERSION
+      $v, $v
     )
   ) unless @$agent;
 
