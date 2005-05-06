@@ -169,7 +169,7 @@ sub poco_weeble_connect_done {
   my $request_id = $response->{'context'};
 
   if (defined $connection) {
-    DEBUG and warn "CON: request $request_id connected ok...\n";
+    DEBUG and warn "CON: request $request_id connected ok...";
 
     my $request = $heap->{request}->{$request_id};
 
@@ -186,7 +186,7 @@ sub poco_weeble_connect_done {
       );
 
     DEBUG and
-      warn "CON: request $request_id uses wheel ", $new_wheel->ID, "\n";
+      warn "CON: request $request_id uses wheel ", $new_wheel->ID;
 
     # Add the new wheel ID to the lookup table.
     $heap->{wheel_to_request}->{ $new_wheel->ID() } = $request_id;
@@ -225,7 +225,7 @@ sub poco_weeble_connect_done {
 sub poco_weeble_timeout {
   my ($kernel, $heap, $request_id) = @_[KERNEL, HEAP, ARG0];
 
-  DEBUG and warn "TKO: request $request_id timed out\n";
+  DEBUG and warn "TKO: request $request_id timed out";
 
   # Discard the request.  Keep a copy for a few bits of cleanup.
   DEBUG and warn "I/O: removing request $request_id";
@@ -245,7 +245,7 @@ sub poco_weeble_timeout {
   # There's a wheel attached to the request.  Shut it down.
   if (defined $request->wheel) {
     my $wheel_id = $request->wheel->ID();
-    DEBUG and warn "TKO: request $request_id is wheel $wheel_id\n";
+    DEBUG and warn "TKO: request $request_id is wheel $wheel_id";
     delete $heap->{wheel_to_request}->{$wheel_id};
   }
 
@@ -258,7 +258,7 @@ sub poco_weeble_timeout {
     _finish_request($heap, $request, 0);
     return;
   } elsif ($request->[REQ_STATE] & RS_POSTED) {
-    DEBUG and warn "I/O: Disconnect, keepalive timeout or HTTP/1.0.\n";
+    DEBUG and warn "I/O: Disconnect, keepalive timeout or HTTP/1.0.";
     $request->error(408, "Request timed out") if $request->[REQ_STATE];
     return;
   }
@@ -280,7 +280,7 @@ sub poco_weeble_io_flushed {
     return;
   }
 
-  DEBUG and warn "I/O: wheel $wheel_id (request $request_id) flushed its request...\n";
+  DEBUG and warn "I/O: wheel $wheel_id (request $request_id) flushed its request...";
 
   my $request = $heap->{request}->{$request_id};
   $request->[REQ_STATE] ^= RS_SENDING;
@@ -348,8 +348,8 @@ sub poco_weeble_io_read {
   my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
   my $request_id = $heap->{wheel_to_request}->{$wheel_id};
 
-  DEBUG and warn "I/O: wheel $wheel_id got input...\n";
-  DEBUG_DATA and warn((ref($input) ? $input->as_string : _hexdump($input)), "\n");
+  DEBUG and warn "I/O: wheel $wheel_id got input...";
+  DEBUG_DATA and warn (ref($input) ? $input->as_string : _hexdump($input));
 
   return unless defined $request_id;
   die unless defined $request_id;
@@ -371,7 +371,7 @@ sub poco_weeble_io_read {
       $input->request ($request->[REQ_REQUEST]);
       #warn "INPUT for ", $request->[REQ_REQUEST]->uri, " is \n",$input->as_string;
     } else {
-      #warn "NO INPUT\n";
+      #warn "NO INPUT";
     }
     # FIXME: LordVorp gets here without $input being a HTTP::Response
     $request->[REQ_RESPONSE] = $input;
@@ -441,14 +441,14 @@ sub poco_weeble_io_read {
     }
 
     DEBUG and do {
-      warn "I/O: wheel $wheel_id got $this_chunk_length octets of content...\n";
+      warn "I/O: wheel $wheel_id got $this_chunk_length octets of content...";
       warn(
 	  "I/O: wheel $wheel_id has $request->[REQ_OCTETS_GOT]",
 	  ( $request->[REQ_RESPONSE]->content_length()
 	    ? ( " out of " . $request->[REQ_RESPONSE]->content_length() )
 	    : ""
 	  ),
-	  " octets\n"
+	  " octets"
 	  );
     };
 
@@ -471,7 +471,7 @@ sub poco_weeble_io_read {
 	$request->[REQ_OCTETS_GOT] >= $request->[REQ_RESPONSE]->content_length()
       ) {
 	DEBUG and
-	  warn "I/O: wheel $wheel_id has a full response... moving to done.\n";
+	  warn "I/O: wheel $wheel_id has a full response... moving to done.";
 
 	$request->[REQ_STATE] = RS_DONE;
       }
@@ -491,7 +491,7 @@ sub poco_weeble_io_read {
 	$request->[REQ_OCTETS_GOT] >= $heap->{max_size}
        ) {
       DEBUG and
-	warn "I/O: wheel $wheel_id got enough data... moving to done.\n";
+	warn "I/O: wheel $wheel_id got enough data... moving to done.";
 
       if (
 	  defined($request->[REQ_RESPONSE]) and
