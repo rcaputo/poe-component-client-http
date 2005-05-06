@@ -26,6 +26,9 @@ sub DEFAULT_BLOCK_SIZE () { 4096 }
 sub new {
   my ($class, $params) = @_;
 
+  croak __PACKAGE__ . "expects its arguments in a hashref"
+      unless (!defined ($params) or ref($params) eq 'HASH');
+
   # Accept an agent, or a reference to a list of agents.
   my $agent = delete $params->{Agent};
   $agent = [] unless defined $agent;
