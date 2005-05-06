@@ -574,7 +574,7 @@ POE::Component::Client::HTTP - a HTTP user-agent component
     Agent     => 'SpiffCrawler/0.90',   # defaults to something long
     Alias     => 'ua',                  # defaults to 'weeble'
     From      => 'spiffster@perl.org',  # defaults to undef (no header)
-    Protocol  => 'HTTP/0.9',            # defaults to 'HTTP/1.0'
+    Protocol  => 'HTTP/0.9',            # defaults to 'HTTP/1.1'
     Timeout   => 60,                    # defaults to 180 seconds
     MaxSize   => 16384,                 # defaults to entire response
     Streaming => 4096,                  # defaults to 0 (off)
@@ -640,6 +640,10 @@ To avoid confusion (and hopefully not cause other confusion), they
 must be spawned with a C<spawn> method, not created anew with a C<new>
 one.
 
+=head1 CONSTRUCTOR
+
+=head2 spawn
+
 PoCo::Client::HTTP's C<spawn> method takes a few named parameters:
 
 =over 2
@@ -699,7 +703,7 @@ NO_PROXY environment variable.
 
 C<Protocol> advertises the protocol that the client wishes to see.
 Under normal circumstances, it should be left to its default value:
-"HTTP/1.0".
+"HTTP/1.1".
 
 =item Proxy => [ $proxy_host, $proxy_port ]
 
@@ -766,8 +770,12 @@ an answer.  This defaults to 180 seconds (three minutes).
 
 =back
 
+=head1 ACCEPTED EVENTS
+
 Sessions communicate asynchronously with PoCo::Client::HTTP.  They
 post requests to it, and it posts responses back.
+
+=head2 request
 
 Requests are posted to the component's "request" state.  They include
 an HTTP::Request object which defines the request.  For example:
@@ -785,6 +793,18 @@ previous example, the handler for a 'response' state will be called
 with each HTTP response.  The "progress" handler is optional and if
 installed, the component will provide progress metrics (see sample
 handler below).
+
+=head2 pending_requests_count
+
+There's also a pending_requests_count state that returns the number of
+requests currently being processed.  To receive the return value, it
+must be invoked with $kernel->call().
+
+  my $count = $kernel->call('ua' => 'pending_requests_count');
+
+=head1 SENT EVENTS
+
+=head2 response handler
 
 In addition to all the usual POE parameters, HTTP responses come with
 two list references:
@@ -806,11 +826,7 @@ HTTP::Response object.
 Please see the HTTP::Request and HTTP::Response manpages for more
 information.
 
-There's also a pending_requests_count state that returns the number of
-requests currently being processed.  To receive the return value, it
-must be invoked with $kernel->call().
-
-  my $count = $kernel->call('ua' => 'pending_requests_count');
+=head2 progress handler
 
 The example progress handler shows how to calculate a percentage of
 download completion.
@@ -831,6 +847,12 @@ download completion.
       "-- %.0f%% [%d/%d]: %s\n", $percent, $got, $tot, $req->uri()
     );
   }
+
+=head3 DEPRECATION WARNING
+
+The third return argument (the raw octets received) has been deprecated.
+Instead of it, use the Streaming parameter to get chunks of content
+in the response handler.
 
 =head1 ENVIRONMENT
 
@@ -856,8 +878,6 @@ distribution.
 
 =head1 BUGS
 
-HTTP/1.1 requests are not supported.
-
 The following spawn() parameters are accepted but not yet implemented:
 Timeout.
 
@@ -865,12 +885,34 @@ There is no support for CGI_PROXY or CgiProxy.
 
 =head1 AUTHOR & COPYRIGHTS
 
-POE::Component::Client::HTTP is Copyright 1999-2002 by Rocco Caputo.
+POE::Component::Client::HTTP is
+
+=over 2
+
+=item
+
+Copyright 1999-2002 Rocco Caputo.
+
+=item
+
+Copyright 2004-2005 Martijn van Beers
+
+=back
+
 All rights are reserved.  POE::Component::Client::HTTP is free
 software; you may redistribute it and/or modify it under the same
 terms as Perl itself.
 
-Rocco may be contacted by e-mail via rcaputo@cpan.org.
+=head1 CONTACT
+
+Rocco may be contacted by e-mail via L<mailto:rcaputo@cpan.org>, and
+Martijn may be contacted by email via L<mailto:martijn@cpan.org>.
+
+The preferred way to report bugs or requests is through RT though.
+See L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=POE-Component-Client-HTTP>
+or mail L<mailto:bug-POE-Component-Client-HTTP@rt.cpan.org>
+
+For questions, try the L<POE> mailing list (poe@perl.org)
 
 =cut
 
