@@ -38,6 +38,10 @@ use POE qw(
   Component::Client::DNS Component::Client::Keepalive
 );
 
+my %te_filters = (
+    chunked => 'POE::Filter::HTTPChunk',
+  );
+
 # }}} INIT
 
 #------------------------------------------------------------------------------
@@ -380,21 +384,27 @@ sub poco_weeble_io_read {
       $request->[REQ_STATE] = RS_DONE;
     } else {
       $request->[REQ_STATE] = RS_IN_CONTENT;
-      my $te = $input->header('Transfer-Encoding');
-      my @te = split(/\s*,\s*/, lc($te));
-      $te = pop(@te);
-      DEBUG and warn "I/O: transfer encoding $te";
       if (my $newrequest = $request->check_redirect) {
 	$kernel->yield (request => $request,
 	  $newrequest, "_redir_".$request->ID, $request->[REQ_PROG_POSTBACK]);
       }
 
-      # do this last, because it triggers a read
-      if ($te eq 'chunked') {
-	$request->wheel->set_input_filter (POE::Filter::HTTPChunk->new (Response => $input));
+      my $filter;
+      my $te = $input->header('Transfer-Encoding');
+      if (defined $te) {
+	$filter = POE::Filter::Stackable->new;
+	my @te = split(/\s*,\s*/, lc($te));
+	while (my $encoding = pop @te) {
+	  my $fclass = $te_filters{$encoding};
+	  last unless (defined $fclass);
+	  $filter->push ($fclass->new);
+	}
+	$input->header('Transfer-Encoding', join(', ', @te));
       } else {
-	$request->wheel->set_input_filter (POE::Filter::Stream->new);
+	$filter = POE::Filter::Stream->new;
       }
+      # do this last, because it triggers a read
+      $request->wheel->set_input_filter ($filter);
     }
     return;
   }
