@@ -137,9 +137,9 @@ sub get_one {
       #return [$newchunk];
     }
     if ($self->[CURRENT_STATE] == STATE_TRAILER) {
-      while ($chunk =~ s/^([-\w]+):\s*(?:.*?)\015?\012//s) {
+      while ($chunk =~ s/^([-\w]+):\s*(.*?)\015?\012//s) {
 	DEBUG and warn "add trailer header $1";
-	$self->[TRAILER_HEADERS]->header ($1, $2);
+	$self->[TRAILER_HEADERS]->push_header ($1, $2);
       }
       #warn "leftover: ", $chunk;
       #warn join (",", map {sprintf("%02X", ord($_))} split (//, substr ($chunk, 0, 10))), "\n";

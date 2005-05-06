@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 2;
+use Test::More tests => 8;
 
 use POE qw(
 		Wheel::ReadWrite
@@ -16,6 +16,8 @@ use POE qw(
 ok (defined $INC{"POE/Filter/HTTPChunk.pm"}, "loaded");
 
 use IO::File;
+
+my $chunk_count = 1;
 
 my $session = POE::Session->create(
 	inline_states => {
@@ -66,10 +68,18 @@ sub input {
 	  }
 	} elsif ($heap->{wheel}->get_input_filter->isa('POE::Filter::HTTPChunk')) {
 		if (UNIVERSAL::isa ($data, 'HTTP::Headers')) {
-			warn "end";
+			if ($chunk_count == 3) {
+				is (scalar $data->header_field_names, 1, "Got trailer 'header'");
+			}
+			if ($chunk_count == 5) {
+				is (scalar $data->header_field_names, 0, "no trailer 'headers'");
+			}
 	  		$heap->{wheel}->set_input_filter (POE::Filter::HTTPHead->new);
+		} else {
+			my $content = "chunk " . $chunk_count x $chunk_count;
+			is ($data, $content, "correct chunk");
+			$chunk_count++;
 		}
-		warn $data;
 	}
 }
 
@@ -88,11 +98,11 @@ Date: Thu, 11 Nov 2004 19:43:00 GMT
 Transfer-Encoding: chunked
 Content-Type: text/plain
 
-9
-chunk one
+7
+chunk 1
 CRAP
-9
-chunk two
+8
+chunk 22
 0
 Server: Apache/1.3.31 (Unix) DAV/1.0.3 mod_gzip/1.3.26.1a PHP/4.3.5 mod_ssl/2.8.19 OpenSSL/0.9.6c
 
@@ -102,9 +112,9 @@ Server: Apache/1.3.31 (Unix) DAV/1.0.3 mod_gzip/1.3.26.1a PHP/4.3.5 mod_ssl/2.8.
 Transfer-Encoding: chunked
 Content-Type: text/plain
 
-B
-chunk three
+9
+chunk 333
 A
-chunk four
+chunk 4444
 0
 

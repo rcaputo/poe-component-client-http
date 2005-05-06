@@ -1,5 +1,5 @@
 # $File: //member/autrijus/ExtUtils-AutoInstall/lib/ExtUtils/AutoInstall.pm $ 
-# $Revision: 1.2 $ $Change: 10538 $ $DateTime: 2004/04/29 17:55:36 $ vim: expandtab shiftwidth=4
+# $Revision$ $Change$ $DateTime$ vim: expandtab shiftwidth=4
 
 package ExtUtils::AutoInstall;
 $ExtUtils::AutoInstall::VERSION = '0.59';
