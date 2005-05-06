@@ -209,6 +209,7 @@ sub create_request {
       Postback => $postback,
       Tag => $tag,
       Progress => $progress_postback,
+      Factory => $self,
     );
 
   if (defined $last_request) {

@@ -26,6 +26,7 @@ sub REQ_HOST          () { 12 }
 sub REQ_PORT          () { 13 }
 sub REQ_HISTORY       () { 14 }
 sub REQ_START_TIME    () { 15 }
+sub REQ_FACTORY       () { 16 }
 
 sub RS_CONNECT      () { 0x01 }
 sub RS_SENDING      () { 0x02 }
@@ -84,8 +85,10 @@ sub new {
 
   #croak "need a Tag parameter" unless (defined $params{'Tag'});
 
-  my ($http_request, $postback, $tag, $progress) =
-				    @params{qw(Request Postback Tag Progress)};
+  croak "need a Factory parameter" unless (defined $params{'Factory'});
+
+  my ($http_request, $postback, $tag, $progress, $factory) =
+      @params{qw(Request Postback Tag Progress Factory)};
 
   my $request_id = ++$request_seq;
   DEBUG and warn "REQ: creating a request ($request_id)";
@@ -139,6 +142,7 @@ sub new {
     $port,              # REQ_PORT
     undef,		# REQ_HISTORY
     time(),             # REQ_START_TIME
+    $factory,           # REQ_FACTORY
    ];
    return bless $self, $class;
 }
@@ -353,6 +357,7 @@ sub DESTROY {
   my ($self) = @_;
 
   delete $self->[REQ_CONNECTION];
+  delete $self->[REQ_FACTORY];
 }
 
 1;
