@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-# $Id: 01_request.t,v 1.16 2003/11/22 06:02:39 rcaputo Exp $
+# $Id$
 
 use strict;
 
@@ -14,17 +14,12 @@ sub DEBUG () { 0 }
 sub MAX_BIG_REQUEST_SIZE  () { 4096 }
 sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
 
+use Test::More tests => 13;
 $| = 1;
-print "1..10\n";
 
-my @test_results = (
-  'not ok 1', 'not ok 2', 'not ok 3', 'not ok 4', 'ok 5', 'not ok 6',
-  'not ok 7', 'not ok 8', 'not ok 9', 'not ok 10',
-);
+my $cm1 = POE::Component::Client::Keepalive->new;
+#my $cm2 = POE::Component::Client::Keepalive->new;
 
-
-my $cm = POE::Component::Client::Keepalive->new;
-#------------------------------------------------------------------------------
 
 sub client_start {
   my ($kernel, $heap) = @_[KERNEL, HEAP];
@@ -76,27 +71,26 @@ sub client_start {
                  GET 'http://poe.perl.org/misc/redir-test.cgi', Connection => 'close'
                );
 
-  $kernel->yield('check_counts', 9, 7);
+  $kernel->yield('check_counts', 7);
 
 }
 
 
 sub client_check_counts {
-  my ($kernel, $test_number, $expected_count) = @_[KERNEL, ARG0, ARG1];
+  my ($kernel, $expected_count) = @_[KERNEL, ARG0, ARG1];
+
   # a better test would be to also keep track of the responses we are
   # receiving and checking that pending_requests_count decrements properly.
   my $count = $kernel->call( weeble => 'pending_requests_count' );
-  $test_results[$test_number-1] = "ok $test_number"
-    if $expected_count == $count;
+  is ($count, $expected_count, "have enough requests pending");
 }
 
 sub client_stop {
   DEBUG and warn "client stopped...\n";
-  foreach (@test_results) {
-    print "$_\n";
-  }
-  $cm->shutdown;
-  $cm = undef;
+  $cm1->shutdown;
+#  $cm2->shutdown;
+  $cm1 = undef;
+#  $cm2 = undef;
 }
 
 sub client_got_response {
@@ -107,6 +101,7 @@ sub client_got_response {
   DEBUG and do {
     warn "client got request...\n";
 
+    warn $http_request->as_string;
     my $response_string = $http_response->as_string();
     $response_string =~ s/^/| /mg;
 
@@ -120,19 +115,15 @@ sub client_got_response {
   if (defined $http_response->code) {
     my $response_string = $http_response->as_string();
     if ($http_response->code == 200) {
-      $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
-      $test_results[1] = 'ok 2' if $response_string =~ /cgi_field_six/;
-      $test_results[2] = 'ok 3' if $response_string =~ /cgi_field_fiv/;
-    }
-    elsif ($http_response->code == 302) {
-      $test_results[3] = 'ok 4' if $response_string =~ /projects\/poe/;
+	ok(1, 'request 1') if $request_path =~ m/\/test\.html$/;
+	ok(1, 'request 2') if $response_string =~ /cgi_field_six/;
+	ok(1, 'request 3') if $response_string =~ /cgi_field_fiv/;
+	ok(1, 'request 5') if $request_path eq '';
+	ok(1, 'request 4') if $request_path =~ m/projects\/poe/;
     }
     elsif ($http_response->code == 500) {
-      $test_results[5] = 'ok 6' if $response_string =~ /foo\.poe\.perl\.org/;
+      like($response_string, qr/foo\.poe\.perl\.org/, 'request 6');
     }
-  }
-  else {
-    $test_results[4] = 'not ok 5';
   }
 }
 
@@ -152,14 +143,8 @@ sub client_got_big_response {
     warn "`", '-' x 78, "\n";
   };
 
-  if ( (defined $http_response->code) and
-       ($http_response->code == 200) and
-       (length($http_response->content()) == MAX_BIG_REQUEST_SIZE)
-     ) {
-      $test_results[6] = 'ok 7';
-  } else {
-      warn "WARNING!!! got ", length($http_response->content()), " expected ", MAX_BIG_REQUEST_SIZE;
-  }
+  is ($http_response->code, 200, "got OK response for request 7");
+  is (length($http_response->content), MAX_BIG_REQUEST_SIZE, "content of correct length for request 7");
 }
 
 sub client_got_redir_response {
@@ -178,39 +163,17 @@ sub client_got_redir_response {
     warn "`", '-' x 78, "\n";
   };
 
-  if (defined $http_response->code) {
-    if ($http_response->code == 200) {
-      if ($http_response->base eq "http://poe.perl.org/misc/test.cgi") {
-        if (
-          $http_response->previous->base eq
-          "http://poe.perl.org/misc/redir-test.cgi"
-        ) {
-          $test_results[9] = "ok 10";
-        }
-        else {
-          $test_results[9] = (
-            "not ok 10 # bad previous base: " .
-            $http_response->previous->base
-          );
-        }
-      }
-      else {
-        $test_results[9] = "not ok 10 # bad base: " .  $http_response->base;
-      }
-    }
-    else {
-      $test_results[9] = "not ok 10 # bad code: " .  $http_response->code . " " . $http_response->message;
-    }
-  }
-  else {
-    $test_results[9] = "not ok 10 # undefined result code";
-  }
+
+  is ($http_response->code, 200, "Got OK response for request 9");
+  is ($http_response->base, "http://poe.perl.org/misc/test.cgi", "response for redirected uri");
+  is ($http_response->previous->base, "http://poe.perl.org/misc/redir-test.cgi", "original request uri matches previous response");
 }
 
 my $total_octets_got = 0;
 my $chunk_buffer = "";
 my $next_chunk_character = "A";
 my $test_8_failed = 0;
+
 
 sub client_got_stream_response {
   my ($heap, $request_packet, $response_packet) = @_[HEAP, ARG0, ARG1];
@@ -250,11 +213,12 @@ sub client_got_stream_response {
     #warn "total: $total_octets_got is ", 26 * MAX_STREAM_CHUNK_SIZE;
     #warn "next: $next_chunk_character";
     #warn "length: ", length($chunk_buffer);
-    $test_results[7] = 'ok 8'
-      if ( ($total_octets_got == 26 * MAX_STREAM_CHUNK_SIZE)
-           and ($next_chunk_character eq "AA")
-           and (length($chunk_buffer) == 0)
-         );
+    ok ( 
+	  (($total_octets_got == 26 * MAX_STREAM_CHUNK_SIZE)
+      and ($next_chunk_character eq "AA")
+      and (length($chunk_buffer) == 0)),
+      'request 8');
+
   }
 }
 
@@ -265,14 +229,14 @@ POE::Component::Client::HTTP->spawn(
   MaxSize => MAX_BIG_REQUEST_SIZE,
   Timeout => 5,
   Protocol => 'HTTP/1.1',
-  ConnectionManager => $cm,
+  ConnectionManager => $cm1,
 );
 
 # Create one for streaming.
 POE::Component::Client::HTTP->spawn(
   Streaming => MAX_STREAM_CHUNK_SIZE,
   Alias     => "streamer",
-  ConnectionManager => $cm,
+  ConnectionManager => $cm1,
 );
 
 # Create one for redirection.
@@ -280,7 +244,7 @@ POE::Component::Client::HTTP->spawn(
   FollowRedirects => 5,
   Alias           => "redirector",
   Protocol => 'HTTP/1.1',
-  ConnectionManager => $cm,
+  ConnectionManager => $cm1,
 );
 
 # Create a session that will make some requests.
@@ -300,14 +264,3 @@ POE::Session->create
 $poe_kernel->run();
 
 exit;
-
-__END__
-
-POST /misc/test.cgi HTTP/1.1
-Host: poe.perl.org
-User-Agent: POE-Component-Client-HTTP/0.65 (perl; N; POE; en; rv:0.650000)
-Content-Length: 71
-Content-Type: application/x-www-form-urlencoded
-
-cgi_field_one=111&cgi_field_two=222&cgi_field_six=666&cgi_field_ten=AAA
-

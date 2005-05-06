@@ -391,7 +391,7 @@ sub poco_weeble_io_read {
     #        but there is no content.
     if ($request->[REQ_REQUEST]->method eq 'HEAD'
      || $input->code =~ /^(?:1|[23]04)/) {
-      $request->[REQ_STATE] = RS_DONE;
+      $request->[REQ_STATE] |= RS_DONE;
     } else {
       $request->[REQ_STATE] = RS_IN_CONTENT;
       if (my $newrequest = $request->check_redirect) {
@@ -427,137 +427,25 @@ sub poco_weeble_io_read {
 
 # }}} HEAD
 
-  # Aggregate the new input.
-  #warn "got more input '$input'";
-
-  if ($request->[REQ_STATE] & RS_IN_CONTENT) {
-    if (ref($input)) {
-      $request->[REQ_STATE] = RS_DONE;
-    } else {
-      $request->[REQ_BUFFER] .= $input;
-    }
-  }
-
 # {{{ content
 
-  # We're in a content state.  This isn't an else clause because we
-  # may go from header to content in the same read.
+  # We're in a content state.
   if ($request->[REQ_STATE] & RS_IN_CONTENT) {
-
-    # Count how many octets we've received.  -><- This may fail on
-    # perl 5.8 if the input has been identified as Unicode.  Then
-    # again, the C<use bytes> in Driver::SysRW may have untainted the
-    # data... or it may have just changed the semantics of length()
-    # therein.  If it's done the former, then we're safe.  Otherwise
-    # we also need to C<use bytes>.
-    my $this_chunk_length = length($request->[REQ_BUFFER]);
-    $request->[REQ_OCTETS_GOT] += $this_chunk_length;
-
-
-    $heap->{factory}->check_size_constraint ($request);
-    # If we are streaming, send the chunk back to the client session.
-    # Otherwise add the new octets to the response's content.  -><-
-    # This should only add up to content-length octets total!
-    if ($heap->{factory}->is_streaming) {
-      $request->[REQ_POSTBACK]->(
-	$request->[REQ_RESPONSE], $request->[REQ_BUFFER]
-      );
+    if (UNIVERSAL::isa ($input, 'HTTP::Response')) {
+      # there was a problem in the input filter
+      # $request->close_connection;
     } else {
-      $request->[REQ_RESPONSE]->add_content($request->[REQ_BUFFER]);
-    }
-
-    DEBUG and do {
-      warn "I/O: wheel $wheel_id got $this_chunk_length octets of content...";
-      warn(
-	  "I/O: wheel $wheel_id has $request->[REQ_OCTETS_GOT]",
-	  ( $request->[REQ_RESPONSE]->content_length()
-	    ? ( " out of " . $request->[REQ_RESPONSE]->content_length() )
-	    : ""
-	  ),
-	  " octets"
-	  );
-    };
-
-    # Stop reading when we have enough content.  -><- Should never be
-    # greater than our content length.
-    if ( $request->[REQ_RESPONSE]->content_length() ) {
-
-      # TODO - Remove this?  Or pass the information to the user?
-      #my $progress = int( ($request->[REQ_OCTETS_GOT] * 100) /
-      #                    $request->[REQ_RESPONSE]->content_length()
-      #                  );
-
-      $request->[REQ_PROG_POSTBACK]->(
-	$request->[REQ_OCTETS_GOT],
-	$request->[REQ_RESPONSE]->content_length(),
-	$request->[REQ_BUFFER],
-      ) if $request->[REQ_PROG_POSTBACK];
-
-      if (
-	$request->[REQ_OCTETS_GOT] >= $request->[REQ_RESPONSE]->content_length()
-      ) {
-	DEBUG and
-	  warn "I/O: wheel $wheel_id has a full response... moving to done.";
-
-	$request->[REQ_STATE] = RS_DONE;
-      }
+      my $is_done = $request->add_content ($input);
     }
   }
 
 # }}} content
 
-  $request->[REQ_BUFFER] = '';
-
-# {{{ not done yet?
-
-  unless ($request->[REQ_STATE] & RS_DONE) {
-
-    if (
-	defined($heap->{max_size}) and
-	$request->[REQ_OCTETS_GOT] >= $heap->{max_size}
-       ) {
-      DEBUG and
-	warn "I/O: wheel $wheel_id got enough data... moving to done.";
-
-      if (
-	  defined($request->[REQ_RESPONSE]) and
-	  defined($request->[REQ_RESPONSE]->code())
-	 ) {
-	$request->[REQ_RESPONSE]->header(
-	    'X-Content-Range',
-	    'bytes 0-' . $request->[REQ_OCTETS_GOT] .
-	    ( $request->[REQ_RESPONSE]->content_length()
-	      ? ('/' . $request->[REQ_RESPONSE]->content_length())
-	      : ''
-	    )
-	    );
-      } else {
-	$request->[REQ_RESPONSE] =
-	  HTTP::Response->new( 400, "Response too large (and no headers)" );
-      }
-
-      $request->[REQ_STATE] = RS_DONE;
-
-      my $request_id = $heap->{wheel_to_request}->{$wheel_id};
-      my $request = $heap->{request}->{$request_id};
-
-      _remove_timeout($kernel, $heap, $request);
-      _finish_request($heap, $request, 1);
-    }
-  }
-
-# }}} not done yet?
-
 # {{{ deliver reponse if complete
 
 # POST response without disconnecting
   if ($request->[REQ_STATE] & RS_DONE
-  and not $request->[REQ_STATE] & RS_POSTED) {
-    DEBUG and warn(
-	"I/O: Calling finish_request() from 'post_finished_requests' of io_read",
-	"I/O: $request->[REQ_ID] or $request_id",
-	"I/O: postback = $request->[REQ_POSTBACK]",
-	);
+      and not $request->[REQ_STATE] & RS_POSTED) {
     _remove_timeout($kernel, $heap, $request);
     _finish_request($heap, $request, 1);
   }

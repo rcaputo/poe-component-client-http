@@ -247,21 +247,10 @@ sub _in_no_proxy {
 
 # }}} _in_no_proxy
 
-sub check_size_constraint {
-  my ($self, $request) = @_;
+sub max_response_size {
+  my ($self) = @_;
 
-  my $max = $self->[FCT_MAXSIZE];
-  return unless (defined $max);
-
-  DEBUG and warn "FCT: request ", $request->ID,
-	      " received $request->[REQ_OCTETS_GOT] bytes; maximum is $max";
-
-  if ($request->[REQ_OCTETS_GOT] > $max) {
-    # We've gone over the maximum content size to return.  Chop it # back.
-    my $over = $request->[REQ_OCTETS_GOT] - $max;
-    $request->[REQ_OCTETS_GOT] -= $over;
-    substr($request->[REQ_BUFFER], -$over) = "";
-  }
+  return $self->[FCT_MAXSIZE];
 }
 
 sub block_size {

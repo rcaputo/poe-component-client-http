@@ -148,6 +148,122 @@ sub new {
    return bless $self, $class;
 }
 
+sub return_response {
+  my ($self) = @_;
+
+  DEBUG and warn "in return_response ", sprintf ("0x%02X", $self->[REQ_STATE]);
+  return if ($self->[REQ_STATE] & RS_POSTED);
+  my $response = $self->[REQ_RESPONSE];
+  # If we're done, send back the HTTP::Response object, which
+  # is filled with content if we aren't streaming, or empty
+  # if we are. that there's no ARG1 lets the client know we're done
+  # with the content in the latter case
+  if ($self->[REQ_STATE] & RS_DONE) {
+      DEBUG and warn "done; returning $response for ", $self->[REQ_ID];
+      $self->[REQ_POSTBACK]->($self->[REQ_RESPONSE]);
+      $self->[REQ_STATE] |= RS_POSTED;
+      #warn "state is now ", $self->[REQ_STATE];
+  } elsif ($self->[REQ_STATE] & RS_IN_CONTENT) {
+    # If we are streaming, send the chunk back to the client session.
+    # Otherwise add the new octets to the response's content.
+    # This should only add up to content-length octets total!
+    if ($self->[REQ_FACTORY]->is_streaming) {
+      DEBUG and warn "returning partial $response";
+      $self->[REQ_POSTBACK]->($self->[REQ_RESPONSE], $self->[REQ_BUFFER]);
+    } else {
+      DEBUG and warn "adding to $response";
+      $self->[REQ_RESPONSE]->add_content($self->[REQ_BUFFER]);
+    }
+  }
+  $self->[REQ_BUFFER] = '';
+}
+
+sub add_content {
+  my ($self, $data) = @_;
+
+  if (ref $data) {
+    $self->[REQ_STATE] = RS_DONE;
+    $data->scan (sub {$self->[REQ_RESPONSE]->header (@_) });
+    return 1;
+  }
+
+  $self->[REQ_BUFFER] .= $data;
+
+  # Count how many octets we've received.  -><- This may fail on
+  # perl 5.8 if the input has been identified as Unicode.  Then
+  # again, the C<use bytes> in Driver::SysRW may have untainted the
+  # data... or it may have just changed the semantics of length()
+  # therein.  If it's done the former, then we're safe.  Otherwise
+  # we also need to C<use bytes>.
+  # TODO: write test(s) for this.
+  my $this_chunk_length = length($self->[REQ_BUFFER]);
+  $self->[REQ_OCTETS_GOT] += $this_chunk_length;
+
+  my $max = $self->[REQ_FACTORY]->max_response_size;
+
+  DEBUG and warn  "REQ: request ", $self->ID,
+		  " received $self->[REQ_OCTETS_GOT] bytes; maximum is $max";
+
+  if (defined $max and $self->[REQ_OCTETS_GOT] > $max) {
+    # We've gone over the maximum content size to return.  Chop it # back.
+    my $over = $self->[REQ_OCTETS_GOT] - $max;
+    $self->[REQ_OCTETS_GOT] -= $over;
+    substr($self->[REQ_BUFFER], -$over) = "";
+    #TODO: ??
+    #$self->[REQ_STATE] |= RS_DONE;
+  }
+
+  # keep this for the progress callback (it gets cleared in return_response
+  # as I say below, this needs to go away.
+  my $buffer = $self->[REQ_BUFFER];
+
+  $self->return_response;
+  DEBUG and do {
+    warn  "REQ: request ", $self->ID,
+	  " got $this_chunk_length octets of content...";
+
+    warn  "REQ: request ", $self->ID,
+	  " has $self->[REQ_OCTETS_GOT]",
+	  ( $self->[REQ_RESPONSE]->content_length()
+	    ? ( " out of " . $self->[REQ_RESPONSE]->content_length() )
+	    : ""
+	  ),
+	  " octets"
+  };
+  if (defined $max and $self->[REQ_OCTETS_GOT] >= $max) {
+    DEBUG and
+      warn  "REQ: request ", $self->ID,
+	    " has a full response... moving to done.";
+    $self->[REQ_STATE] |= RS_DONE;
+    $self->[REQ_STATE] &= ~RS_IN_CONTENT;
+    return 1;
+  }
+
+  if ($self->[REQ_RESPONSE]->content_length) {
+
+    # Report back progress
+    $self->[REQ_PROG_POSTBACK]->(
+	  $self->[REQ_OCTETS_GOT],
+	  $self->[REQ_RESPONSE]->content_length,
+	  #TODO: ugh. this is stupid. Must remove/deprecate!
+	  $buffer,
+      ) if ($self->[REQ_PROG_POSTBACK]);
+
+
+    # Stop reading when we have enough content.  -><- Should never be
+    # greater than our content length.
+    if ($self->[REQ_OCTETS_GOT] >= $self->[REQ_RESPONSE]->content_length) {
+      DEBUG and
+        warn  "REQ: request ", $self->ID,
+	      " has a full response... moving to done.";
+      $self->[REQ_STATE] |= RS_DONE;
+      $self->[REQ_STATE] &= ~RS_IN_CONTENT;
+      return 1;
+    }
+  }
+  return 0;
+}
+
 sub timer {
   my ($self, $timer) = @_;
 
@@ -191,8 +307,7 @@ sub _set_host_header {
     $new_host = $uri->host();
     $new_port = $uri->port();
     # Only include the port if it's nonstandard.
-    # TODO - Should we check for SSL ports here?
-    if ($new_port == 80) {
+    if ($new_port == 80 || $new_port == 443) {
       $request->header( Host => $new_host );
     } else {
       $request->header( Host => "$new_host:$new_port" );
