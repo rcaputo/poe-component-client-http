@@ -379,6 +379,11 @@ sub poco_weeble_io_read {
     }
     # FIXME: LordVorp gets here without $input being a HTTP::Response
     $request->[REQ_RESPONSE] = $input;
+
+    # Some responses are without content by definition
+    # FIXME: #12363
+    #        Make sure we finish even when it isn't one of these,
+    #        but there is no content.
     if ($request->[REQ_REQUEST]->method eq 'HEAD'
      || $input->code =~ /^(?:1|[23]04)/) {
       $request->[REQ_STATE] = RS_DONE;
