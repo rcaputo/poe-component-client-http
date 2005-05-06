@@ -17,7 +17,7 @@ sub REQ_REQUEST       () {  3 }
 sub REQ_STATE         () {  4 }
 sub REQ_RESPONSE      () {  5 }
 sub REQ_BUFFER        () {  6 }
-sub REQ_LAST_HEADER   () {  7 }
+
 sub REQ_OCTETS_GOT    () {  8 }
 sub REQ_TIMER         () {  9 }
 sub REQ_PROG_POSTBACK () { 10 }
@@ -44,7 +44,7 @@ sub import {
     if ($tag eq ':fields') {
       foreach my $sub (qw(
 	REQ_ID REQ_POSTBACK REQ_CONNECTION REQ_REQUEST REQ_STATE REQ_RESPONSE
-	REQ_BUFFER REQ_LAST_HEADER REQ_OCTETS_GOT REQ_TIMER REQ_PROG_POSTBACK
+	REQ_BUFFER REQ_OCTETS_GOT REQ_TIMER REQ_PROG_POSTBACK
 	REQ_USING_PROXY REQ_HOST REQ_PORT REQ_HISTORY REQ_START_TIME
 		    )) {
 	no strict 'refs';
@@ -130,7 +130,7 @@ sub new {
     RS_CONNECT,         # REQ_STATE
     undef,              # REQ_RESPONSE
     '',                 # REQ_BUFFER
-    undef,              # REQ_LAST_HEADER
+    undef,              # unused
     0,                  # REQ_OCTETS_GOT
     undef,              # REQ_TIMER
 #    "\x0D\x0A",         # REQ_NEWLINE
