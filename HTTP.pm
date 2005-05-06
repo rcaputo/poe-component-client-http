@@ -239,8 +239,8 @@ sub poco_weeble_timeout {
     );
   }
 
-  DEBUG and warn "TKO: request $request_id has timer $request->[REQ_TIMER]\n";
-  $request->[REQ_TIMER] = undef;
+  DEBUG and warn "TKO: request $request_id has timer ", $request->timer;
+  $request->timer(undef);
 
   # There's a wheel attached to the request.  Shut it down.
   if (defined $request->wheel) {
@@ -255,7 +255,7 @@ sub poco_weeble_timeout {
   if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and not $request->[REQ_STATE] & RS_POSTED) {
 
     #warn "request_id is $request_id, while request's id is $request->[REQ_ID]";
-    _finish_request($heap, $request_id, $request, 0);
+    _finish_request($heap, $request, 0);
     return;
   } elsif ($request->[REQ_STATE] & RS_POSTED) {
     DEBUG and warn "I/O: Disconnect, keepalive timeout or HTTP/1.0.\n";
@@ -324,7 +324,7 @@ sub poco_weeble_io_error {
 	DEBUG and warn "STATE is ", $request->[REQ_STATE];
         if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and not $request->[REQ_STATE] & RS_POSTED) {
 
-            _finish_request($heap, $request_id, $request, 0);
+            _finish_request($heap, $request, 0);
 
             return;
         } elsif ($request->[REQ_STATE] & RS_POSTED) {
@@ -358,7 +358,7 @@ sub poco_weeble_io_read {
   DEBUG and warn "REQUEST is $request";
 
   # Reset the timeout if we get data.
-  $kernel->delay_adjust($request->[REQ_TIMER], $heap->{factory}->timeout);
+  $kernel->delay_adjust($request->timer, $heap->{factory}->timeout);
 
 # {{{ HEAD
 
@@ -516,7 +516,7 @@ sub poco_weeble_io_read {
       my $request = $heap->{request}->{$request_id};
 
       _remove_timeout($kernel, $heap, $request);
-      _finish_request($heap, $request_id, $request, 1);
+      _finish_request($heap, $request, 1);
     }
   }
 
@@ -533,7 +533,7 @@ sub poco_weeble_io_read {
 	"I/O: postback = $request->[REQ_POSTBACK]",
 	);
     _remove_timeout($kernel, $heap, $request);
-    _finish_request($heap, $request_id, $request, 1);
+    _finish_request($heap, $request, 1);
   }
 
 # }}} deliver reponse if complete
@@ -574,11 +574,13 @@ sub _hexdump {
 # {{{ _finish_request
 
 sub _finish_request {
-  my ($heap, $request_id, $request, $wait) = @_;
+  my ($heap, $request, $wait) = @_;
 
+  my $request_id = $request->ID;
   if (DEBUG) {
     my ($pkg, $file, $line) = caller();
-    DEBUG and warn "XXX: calling _finish_request(request id = $request_id) at $file line $line\n";
+    warn  "XXX: calling _finish_request(request id = $request_id)"
+    	. "at $file line $line";
   }
 
   # If we have a cookie jar, have it frob our headers.  LWP rocks!
@@ -605,13 +607,13 @@ sub _finish_request {
     #wait a bit with removing the request, so there's
     #time to receive the EOF event in case the connection
     #gets closed.
-    my $alarm_id = $poe_kernel->delay_add ('remove_request', 0.5, $request_id);
-    my $request = $heap->{request}->{request_id};
-    if (not defined ($request->[REQ_TIMER])) {
-      $request->[REQ_TIMER] = $alarm_id;
-    } else {
-      warn "STILL GOT TIMER";
+    my $alarm_id = $poe_kernel->delay_set ('remove_request', 0.5, $request_id);
+    if (defined ($request->timer)) {
+      # remove the old timeout first
+      my $old_timer = $request->timer;
+      $poe_kernel->alarm_remove ($old_timer);
     }
+    $request->timer ($alarm_id);
   } else {
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
@@ -637,7 +639,7 @@ sub poco_weeble_remove_request {
 sub _remove_timeout {
     my ($kernel, $heap, $request) = @_;
     # Stop the timeout timer for this wheel, too.
-    my $alarm_id = $request->[REQ_TIMER];
+    my $alarm_id = $request->timer;
     DEBUG and warn "I/O: checking for $alarm_id";
     $kernel->alarm_remove( $alarm_id );
 }

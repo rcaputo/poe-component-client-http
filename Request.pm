@@ -147,6 +147,16 @@ sub new {
    return bless $self, $class;
 }
 
+sub timer {
+  my ($self, $timer) = @_;
+
+  # do it this way so we can set REQ_TIMER to undef
+  if (@_ == 2) {
+    $self->[REQ_TIMER] = $timer;
+  }
+  return $self->[REQ_TIMER];
+}
+
 sub create_timer {
   my ($self, $timeout) = @_;
 
