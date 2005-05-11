@@ -6,7 +6,7 @@ use strict;
 use warnings;
 
 use Carp;
-use POE::Component::Client::HTTP::Request qw(:states :fields);
+use POE::Component::Client::HTTP::Request;
 use POE::Component::Client::HTTP;
 
 sub FCT_AGENT           () {  0 }
