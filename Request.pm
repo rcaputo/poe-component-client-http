@@ -154,6 +154,10 @@ sub return_response {
   DEBUG and warn "in return_response ", sprintf ("0x%02X", $self->[REQ_STATE]);
   return if ($self->[REQ_STATE] & RS_POSTED);
   my $response = $self->[REQ_RESPONSE];
+
+  # If we have a cookie jar, have it frob our headers.  LWP rocks!
+  $self->[REQ_FACTORY]->frob_cookies ($response);
+
   # If we're done, send back the HTTP::Response object, which
   # is filled with content if we aren't streaming, or empty
   # if we are. that there's no ARG1 lets the client know we're done

@@ -263,10 +263,10 @@ sub block_size {
 }
 
 sub frob_cookies {
-  my ($self, $request) = @_;
+  my ($self, $response) = @_;
 
   if (defined $self->[FCT_COOKIEJAR]) {
-    $self->[FCT_COOKIEJAR] ->extract_cookies($request->[REQ_RESPONSE]);
+    $self->[FCT_COOKIEJAR] ->extract_cookies($response);
   }
 }
 

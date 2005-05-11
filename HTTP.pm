@@ -497,9 +497,6 @@ sub _finish_request {
     	. "at $file line $line";
   }
 
-  # If we have a cookie jar, have it frob our headers.  LWP rocks!
-  $heap->{factory}->frob_cookies ($request);
-
   # If we're streaming, the response is HTTP::Response without
   # content and undef to signal the end of the stream.  Otherwise
   # it's the entire HTTP::Response object we've carefully built.
