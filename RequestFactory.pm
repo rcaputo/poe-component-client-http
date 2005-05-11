@@ -1,6 +1,3 @@
-# $Id: HTTP.pm,v 1.56 2004/07/13 18:02:37 rcaputo Exp $
-# License and documentation are after __END__.
-
 package POE::Component::Client::HTTP::RequestFactory;
 use strict;
 use warnings;
@@ -24,6 +21,63 @@ our $VERSION = "0.01";
 sub DEBUG () { 0 }
 
 sub DEFAULT_BLOCK_SIZE () { 4096 }
+
+=head1 CONSTRUCTOR
+
+=head2 new
+
+Create a new request factory object. It expects its parameters in
+a hashref. 
+
+The following parameters are accepted.
+
+=over 4
+
+=item 
+
+Agent
+
+=item
+
+MaxSize
+
+=item
+
+Streaming
+
+=item
+
+Protocol
+
+=item
+
+From
+
+=item
+
+CookieJar
+
+=item
+
+NoProxy
+
+=item
+
+Proxy
+
+=item
+
+FollowRedirects
+
+=item
+
+Timeout
+
+=back
+
+An explanation for these is in L<POE::Component::Client::HTTP>
+
+=cut
 
 sub new {
   my ($class, $params) = @_;
@@ -112,6 +166,15 @@ sub new {
   return bless $self, $class;
 }
 
+=head1 METHODS
+
+=head2 timeout [$timeout]
+
+Method that lets you query and/or change the timeout value for requests
+created by this factory.
+
+=cut
+
 sub timeout {
   my ($self, $timeout) = @_;
 
@@ -120,6 +183,12 @@ sub timeout {
   }
   return $self->[FCT_TIMEOUT];
 }
+
+=head2 is_streaming
+
+Accessor for the Streaming parameter
+
+=cut
 
 sub is_streaming {
   my ($self) = @_;
@@ -130,11 +199,23 @@ sub is_streaming {
   return $self->[FCT_STREAMING];
 }
 
+=head2
+
+Accessor to the Agent parameter
+
+=cut
+
 sub agent {
     my ($self) = @_;
 
     return $self->[FCT_AGENT]->[rand @{$self->[FCT_AGENT]}];
 }
+
+=head2
+
+getter/setter for the From parameter
+
+=cut
 
 sub from {
   my ($self) = @_;
@@ -144,6 +225,12 @@ sub from {
   }
   return undef;
 }
+
+=head2 create_request
+
+Creates a new L<POE::Component::Client::HTTP::Request>
+
+=cut
 
 sub create_request {
   my ($self, $http_request, $response_event, $tag, $progress_event, $sender) = @_;
@@ -233,11 +320,24 @@ sub _in_no_proxy {
 
 # }}} _in_no_proxy
 
+=head2 max_response_size
+
+Method to retrieve the maximum size of a response, as set by the
+C<MaxSize> parameter to L<Client::HTTP>'s C<spawn()> method.
+
+=cut
+
 sub max_response_size {
   my ($self) = @_;
 
   return $self->[FCT_MAXSIZE];
 }
+
+=head2 block_size
+
+Accessor for the Streaming parameter
+
+=cut
 
 sub block_size {
   my ($self) = @_;
@@ -248,6 +348,13 @@ sub block_size {
   return $block_size;
 }
 
+=head2 frob_cookies $response
+
+Store the cookies from the L<HTTP::Response> parameter passed into
+our cookie jar
+
+=cut
+
 sub frob_cookies {
   my ($self, $response) = @_;
 
@@ -255,6 +362,15 @@ sub frob_cookies {
     $self->[FCT_COOKIEJAR] ->extract_cookies($response);
   }
 }
+
+=head2 max_redirect_count [$count]
+
+Function to get/set the maximum number of redirects to follow
+automatically. This allows you to retrieve or modify the value
+you passed with the FollowRedirects parameter to L<Client::HTTP>'s
+C<spawn> method.
+
+=cut
 
 sub max_redirect_count {
   my ($self, $count) = @_;
