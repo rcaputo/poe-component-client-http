@@ -372,8 +372,8 @@ sub check_redirect {
   }
 
   if ($history > $max) {
-    $self->[REQ_STATE] |= RS_DONE;
-    DEBUG and warn "RED: Too much redirection, moving to done\n";
+    #$self->[REQ_STATE] |= RS_DONE;
+    DEBUG and warn "RED: Too much redirection";
   } else { # All fine, yield new request and mark this disabled.
     my $newrequest = $self->[REQ_REQUEST]->clone();
     DEBUG and warn "RED: new request $newrequest";
