@@ -130,20 +130,6 @@ sub is_streaming {
   return $self->[FCT_STREAMING];
 }
 
-sub check_redirect {
-  my ($self, $request) = @_;
-
-  if ($self->[FCT_FOLLOWREDIRECTS]) { # redirect
-    if ($request->does_redirect) {
-	  
-      # delete OLD timeout
-      #my $alarm_id = $request->history->[0]->[REQ_TIMEOUT];
-      #DEBUG and warn "RED: Removing old timeout $alarm_id\n";
-      #$POE::Kernel::poe_kernel->alarm_remove ($alarm_id);
-    }
-  }
-}
-
 sub agent {
     my ($self) = @_;
 
