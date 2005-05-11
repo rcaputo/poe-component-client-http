@@ -281,15 +281,27 @@ sub timer {
 sub create_timer {
   my ($self, $timeout) = @_;
 
+  # remove old timeout first
   my $kernel = $POE::Kernel::poe_kernel;
 
   my $seconds = $timeout - (time() - $self->[REQ_START_TIME]);
-  $self->[REQ_TIMER] =
+  $self->[REQ_TIMER] = 
       $kernel->delay_set (got_timeout =>
 	  $seconds, $self->ID
 	);
   DEBUG and warn "TKO: request ", $self->ID,
     " has timer $self->[REQ_TIMER] going off in $seconds seconds\n";
+}
+
+sub remove_timeout {
+  my ($self) = @_;
+
+  my $alarm_id = $self->[REQ_TIMER];
+  if (defined $alarm_id) {
+    my $kernel = $POE::Kernel::poe_kernel;
+    DEBUG and warn "REQ: Removing timer $alarm_id";
+    $kernel->alarm_remove($alarm_id);
+  }
 }
 
 sub postback {

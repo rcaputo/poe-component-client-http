@@ -314,7 +314,7 @@ sub poco_weeble_io_error {
 
         DEBUG and warn "I/O: removing request $request_id";
         my $request = delete $heap->{request}->{$request_id};
-        _remove_timeout($kernel, $heap, $request);
+	$request->remove_timeout;
 
         # If there was a non-zero error, then something bad happened.  Post
         # an error response back.
@@ -446,7 +446,7 @@ sub poco_weeble_io_read {
 # POST response without disconnecting
   if ($request->[REQ_STATE] & RS_DONE
       and not $request->[REQ_STATE] & RS_POSTED) {
-    _remove_timeout($kernel, $heap, $request);
+    $request->remove_timeout;
     _finish_request($heap, $request, 1);
   }
 
@@ -515,11 +515,10 @@ sub _finish_request {
     #time to receive the EOF event in case the connection
     #gets closed.
     my $alarm_id = $poe_kernel->delay_set ('remove_request', 0.5, $request_id);
-    if (defined ($request->timer)) {
-      # remove the old timeout first
-      my $old_timer = $request->timer;
-      $poe_kernel->alarm_remove ($old_timer);
-    }
+
+    # remove the old timeout first
+    $request->remove_timeout;
+
     $request->timer ($alarm_id);
   } else {
     DEBUG and warn "I/O: removing request $request_id";
@@ -528,6 +527,7 @@ sub _finish_request {
 }
 
 # }}} _finish_request
+
 #{{{ _remove_request
 sub poco_weeble_remove_request {
   my ($kernel, $heap, $request_id) = @_[KERNEL, HEAP, ARG0];
@@ -537,21 +537,8 @@ sub poco_weeble_remove_request {
     warn "I/O: removed request $request_id";
   }
 }
-#}}}
-#------------------------------------------------------------------------------
-# Cancel a request timeout. This was all over the place and is now a function.
-# This is not a POE function.
-# {{{ _remove_timeout
+#}}} _remove_request
 
-sub _remove_timeout {
-    my ($kernel, $heap, $request) = @_;
-    # Stop the timeout timer for this wheel, too.
-    my $alarm_id = $request->timer;
-    DEBUG and warn "I/O: checking for $alarm_id";
-    $kernel->alarm_remove( $alarm_id );
-}
-
-# }}} _remove_timeout
 
 1;
 
