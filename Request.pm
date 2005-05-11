@@ -379,23 +379,7 @@ sub check_redirect {
     $newrequest->uri($new_uri);
     _set_host_header ($newrequest);
 
-    #$POE::Kernel::poe_kernel->yield(
-	  #request => $self,
-	  #$newrequest, "_redir_".$self->ID,
-	  #$self->[REQ_PROG_POSTBACK]
-	  #);
-    #$heap->{redir}->{$request_id}->{request} = $request->[REQ_REQUEST];
-    #$heap->{redir}->{$request_id}->{followed} = 1; # Mark redirected.
-
-    DEBUG and warn "RED: Complete the redirect";
-    #if (K) {
-	## _remove_timeout($kernel, $heap, $request);
-	## _finish_redirect($heap, $request_id, $request);
-	#$heap->{redir}->{$request_id}->{timeout} = $request->[REQ_TIMER];
-
-	## _finish_request($heap, $request_id, $request);
-      $self->[REQ_STATE] = RS_DONE | RS_POSTED;
-    #}
+    $self->[REQ_STATE] = RS_REDIRECTED;
     DEBUG and warn "RED: new request $newrequest";
     return $newrequest;
   }

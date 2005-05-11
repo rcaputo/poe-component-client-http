@@ -401,7 +401,6 @@ sub poco_weeble_io_read {
 	DEBUG and warn "Redirected $request_id ", $input->code;
 	$kernel->yield (request => $request,
 	  $newrequest, "_redir_".$request->ID, $request->[REQ_PROG_POSTBACK]);
-	$request->[REQ_STATE] = RS_REDIRECTED;
 	return
       }
 
