@@ -256,4 +256,12 @@ sub frob_cookies {
   }
 }
 
+sub max_redirect_count {
+  my ($self, $count) = @_;
+
+  if (defined $count) {
+    $self->[FCT_FOLLOWREDIRECTS] = $count;
+  }
+  return $self->[FCT_FOLLOWREDIRECTS];
+}
 1;

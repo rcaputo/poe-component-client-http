@@ -347,8 +347,9 @@ sub does_redirect {
 }
 
 sub check_redirect {
-
   my ($self) = @_;
+
+  my $max = $self->[REQ_FACTORY]->max_redirect_count;
 
   if (defined $self->[REQ_HISTORY]) {
     $self->[REQ_RESPONSE]->previous($self->[REQ_HISTORY]->[REQ_RESPONSE]);
@@ -366,11 +367,11 @@ sub check_redirect {
   my $history = 0;
   while ($prev = $prev->[REQ_HISTORY]) {
     $history++;
-    $history = 10 if ($prev->[REQ_REQUEST]->uri eq $new_uri);
-    last if ($history > 5);
+    $history = $max + 1 if ($prev->[REQ_REQUEST]->uri eq $new_uri);
+    last if ($history > $max);
   }
 
-  if ($history > 5) {
+  if ($history > $max) {
     $self->[REQ_STATE] |= RS_DONE;
     DEBUG and warn "RED: Too much redirection, moving to done\n";
   } else { # All fine, yield new request and mark this disabled.
