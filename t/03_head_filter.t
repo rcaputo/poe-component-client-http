@@ -51,7 +51,6 @@ sub start {
 
 sub input {
   my ($kernel, $heap, $data) = @_[KERNEL, HEAP, ARG0];
-	warn $data;
   if ($heap->{wheel}->get_input_filter->isa('POE::Filter::Line')) {
     $request_number == 2 and is($data, 'content', "Got content foo");
     #$request_number == 1 and is($data, 'contents', "Got content bar");

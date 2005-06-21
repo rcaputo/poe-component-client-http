@@ -5,10 +5,8 @@ HTTP.pm
 HTTPChunk.pm
 HTTPHead.pm
 MANIFEST
-META.yml                                 Module meta-data (added by MakeMaker)
 Makefile.PL
 README
-mylib/ExtUtils/AutoInstall.pm
 Request.pm
 RequestFactory.pm
 t/01_request.t

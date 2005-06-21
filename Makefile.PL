@@ -4,36 +4,23 @@
 use strict;
 use lib qw(./mylib);
 use ExtUtils::MakeMaker;
-use ExtUtils::AutoInstall;
 
 # Touch CHANGES so it exists.
 open(CHANGES, ">>CHANGES") and close CHANGES;
 
 my %prereq = (
-  'POE'					=> 0.31,
-  'HTTP::Request'			=> 1.30,
-  'HTTP::Response'			=> 1.37,
-  'URI'					=> 1.24,
-  'POE::Component::Client::Keepalive'	=> 0.02,
-);
-
-# Prompt for optional things.
-# TODO - Move to PoCo::Client::Keepalive.
-ExtUtils::AutoInstall->import(
-  -version => '0.54',
-  -core    => [ %prereq ],
-  "Optional modules for SSL support." => [
-    -default              => 0,
-    'Net::SSLeay'         => 1.17,
-    'Net::SSLeay::Handle' => 0.61,
-  ],
+  'POE'             => 0.31,
+  'HTTP::Request'   => 1.30,
+  'HTTP::Response'  => 1.37,
+  'URI'             => 1.24,
+  'POE::Component::Client::Keepalive' => 0.02,
 );
 
 # Write that makefile.
 WriteMakefile(
   NAME         => 'POE::Component::Client::HTTP',
   AUTHOR       => 'Rocco Caputo <rcaputo@cpan.org>',
-  ABSTRACT     => 'POE component for non-blocking/concurrent HTTP queries.',
+  ABSTRACT     => 'Non-blocking/concurrent HTTP queries with POE',
   VERSION_FROM => 'HTTP.pm',
   PM           => {
     'HTTP.pm'           => '$(INST_LIBDIR)/HTTP.pm',
@@ -47,7 +34,7 @@ WriteMakefile(
     COMPRESS   => 'gzip -9f',
     SUFFIX     => 'gz',
     PREOP      => (
-      'cvs-log.perl | ' .
+      'svn-log.perl --repo https://thirdlobe.com/svn/poco-client-http | ' .
       'tee ./$(DISTNAME)-$(VERSION)/CHANGES > ./CHANGES'
     ),
   },
