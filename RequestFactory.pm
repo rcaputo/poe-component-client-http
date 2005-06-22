@@ -1,3 +1,5 @@
+# $Id$
+
 package POE::Component::Client::HTTP::RequestFactory;
 use strict;
 use warnings;
@@ -26,8 +28,8 @@ sub DEFAULT_BLOCK_SIZE () { 4096 }
 
 =head2 new
 
-Create a new request factory object. It expects its parameters in
-a hashref. 
+Create a new request factory object. It expects its parameters in a
+hashref.
 
 The following parameters are accepted.
 
@@ -83,14 +85,12 @@ sub new {
   my ($class, $params) = @_;
 
   croak __PACKAGE__ . "expects its arguments in a hashref"
-      unless (!defined ($params) or ref($params) eq 'HASH');
+    unless (!defined ($params) or ref($params) eq 'HASH');
 
   # Accept an agent, or a reference to a list of agents.
   my $agent = delete $params->{Agent};
   $agent = [] unless defined $agent;
-  if (!ref($agent)) {
-    $agent = [ $agent ];
-  }
+  $agent = [ $agent ] unless ref($agent);
   unless (ref($agent) eq "ARRAY") {
     croak "Agent must be a scalar or a reference to a list of agent strings";
   }
@@ -193,9 +193,11 @@ Accessor for the Streaming parameter
 sub is_streaming {
   my ($self) = @_;
 
-  DEBUG and warn "FCT: this is "
-		. ($self->[FCT_STREAMING] ? "" : "not ")
-		. "streaming";
+  DEBUG and warn(
+    "FCT: this is "
+    . ($self->[FCT_STREAMING] ? "" : "not ")
+    . "streaming"
+  );
   return $self->[FCT_STREAMING];
 }
 
@@ -206,9 +208,9 @@ Accessor to the Agent parameter
 =cut
 
 sub agent {
-    my ($self) = @_;
+  my ($self) = @_;
 
-    return $self->[FCT_AGENT]->[rand @{$self->[FCT_AGENT]}];
+  return $self->[FCT_AGENT]->[rand @{$self->[FCT_AGENT]}];
 }
 
 =head2
@@ -233,14 +235,14 @@ Creates a new L<POE::Component::Client::HTTP::Request>
 =cut
 
 sub create_request {
-  my ($self, $http_request, $response_event, $tag, $progress_event, $sender) = @_;
+  my ($self, $http_request, $response_event, $tag, $progress_event, $sender) =
+    @_;
 
   # Add a protocol if one isn't included.
-  $http_request->protocol( $self->[FCT_PROTOCOL] )
-    unless (
-      defined $http_request->protocol()
-      and length $http_request->protocol()
-    );
+  $http_request->protocol( $self->[FCT_PROTOCOL] ) unless (
+    defined $http_request->protocol()
+    and length $http_request->protocol()
+  );
 
 
   # Add the User-Agent: header if one isn't included.
@@ -260,13 +262,18 @@ sub create_request {
   if (ref($response_event)) {
     $last_request = $response_event;
     $postback = $last_request->postback;
-  } else {
+  }
+  else {
     $postback = $sender->postback( $response_event, $http_request, $tag );
   }
   # Create a progress postback if requested.
   my $progress_postback;
   if (defined $progress_event) {
-    $progress_postback = $sender->postback($progress_event, $http_request, $tag);
+    $progress_postback = $sender->postback(
+      $progress_event,
+      $http_request,
+      $tag
+    );
   }
 
   # If we have a cookie jar, have it add the appropriate headers.
@@ -293,13 +300,13 @@ sub create_request {
   }
 
   my $request = POE::Component::Client::HTTP::Request->new (
-      Request => $http_request,
-      Proxy => $using_proxy,
-      Postback => $postback,
-      Tag => $tag,
-      Progress => $progress_postback,
-      Factory => $self,
-    );
+    Request => $http_request,
+    Proxy => $using_proxy,
+    Postback => $postback,
+    Tag => $tag,
+    Progress => $progress_postback,
+    Factory => $self,
+  );
 
   if (defined $last_request) {
     $request->does_redirect ($last_request);

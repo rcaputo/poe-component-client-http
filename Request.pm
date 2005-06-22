@@ -1,3 +1,5 @@
+# $Id$
+
 package POE::Component::Client::HTTP::Request;
 use strict;
 use warnings;
@@ -45,22 +47,28 @@ sub import {
 
   foreach my $tag (@_) {
     if ($tag eq ':fields') {
-      foreach my $sub (qw(
-	REQ_ID REQ_POSTBACK REQ_CONNECTION REQ_REQUEST REQ_STATE REQ_RESPONSE
-	REQ_BUFFER REQ_OCTETS_GOT REQ_TIMER REQ_PROG_POSTBACK
-	REQ_USING_PROXY REQ_HOST REQ_PORT REQ_HISTORY REQ_START_TIME
-		    )) {
-	no strict 'refs';
-	*{$package . "::$sub"} = \&$sub;
+      foreach my $sub (
+        qw(
+          REQ_ID REQ_POSTBACK REQ_CONNECTION REQ_REQUEST REQ_STATE
+          REQ_RESPONSE REQ_BUFFER REQ_OCTETS_GOT REQ_TIMER
+          REQ_PROG_POSTBACK REQ_USING_PROXY REQ_HOST REQ_PORT
+          REQ_HISTORY REQ_START_TIME
+        )
+      ) {
+        no strict 'refs';
+        *{$package . "::$sub"} = \&$sub;
       }
     }
+
     if ($tag eq ':states') {
-      foreach my $sub (qw(
-	RS_CONNECT RS_SENDING RS_IN_HEAD RS_REDIRECTED
-	RS_IN_CONTENT RS_DONE RS_POSTED
-		    )) {
-	no strict 'refs';
-	*{$package . "::$sub"} = \&$sub;
+      foreach my $sub (
+        qw(
+          RS_CONNECT RS_SENDING RS_IN_HEAD RS_REDIRECTED
+          RS_IN_CONTENT RS_DONE RS_POSTED
+        )
+      ) {
+        no strict 'refs';
+        *{$package . "::$sub"} = \&$sub;
       }
     }
   }
@@ -68,28 +76,25 @@ sub import {
 
 sub ID {
   my ($self) = @_;
-
   return $self->[REQ_ID];
 }
 
 sub new {
   my $class = shift;
 
-  croak __PACKAGE__ . "expects its arguments to be key/value pairs"
-    if (@_ & 1);
+  croak __PACKAGE__ . "expects its arguments to be key/value pairs" if @_ & 1;
   my %params = @_;
-
 
   croak "need a Request parameter" unless (defined $params{'Request'});
   croak "Request must be a HTTP::Request object"
-      unless (UNIVERSAL::isa ($params{'Request'}, "HTTP::Request"));
+    unless (UNIVERSAL::isa ($params{'Request'}, "HTTP::Request"));
 
   #croak "need a Tag parameter" unless (defined $params{'Tag'});
 
   croak "need a Factory parameter" unless (defined $params{'Factory'});
 
   my ($http_request, $postback, $tag, $progress, $factory) =
-      @params{qw(Request Postback Tag Progress Factory)};
+    @params{qw(Request Postback Tag Progress Factory)};
 
   my $request_id = ++$request_seq;
   DEBUG and warn "REQ: creating a request ($request_id)";
@@ -106,10 +111,10 @@ sub new {
 
   # Add a host header if one isn't included.  Must do this before
   # we reset the $host for the proxy!
-  _set_host_header ($http_request)
-    unless (  defined $http_request->header('Host')
-	and   length $http_request->header('Host')
-      );
+  _set_host_header ($http_request) unless (
+    defined $http_request->header('Host') and
+    length $http_request->header('Host')
+  );
 
 
   if (defined $params{Proxy}) {
@@ -118,11 +123,10 @@ sub new {
     # header is set, so it doesn't break the request object.
     ($host, $port) = $params{Proxy}->[rand @{$params{Proxy}}];
     $using_proxy = 1;
-  } else {
+  }
+  else {
     $using_proxy = 0;
   }
-
-
 
   # Build the request.
   my $self = [
@@ -136,12 +140,12 @@ sub new {
     undef,              # unused
     0,                  # REQ_OCTETS_GOT
     undef,              # REQ_TIMER
-#    "\x0D\x0A",         # REQ_NEWLINE
+    #"\x0D\x0A",         # REQ_NEWLINE
     $progress,          # REQ_PROG_POSTBACK
     $using_proxy,       # REQ_USING_PROXY
     $host,              # REQ_HOST
     $port,              # REQ_PORT
-    undef,		# REQ_HISTORY
+    undef,              # REQ_HISTORY
     time(),             # REQ_START_TIME
     $factory,           # REQ_FACTORY
    ];
@@ -163,18 +167,20 @@ sub return_response {
   # if we are. that there's no ARG1 lets the client know we're done
   # with the content in the latter case
   if ($self->[REQ_STATE] & RS_DONE) {
-      DEBUG and warn "done; returning $response for ", $self->[REQ_ID];
-      $self->[REQ_POSTBACK]->($self->[REQ_RESPONSE]);
-      $self->[REQ_STATE] |= RS_POSTED;
-      #warn "state is now ", $self->[REQ_STATE];
-  } elsif ($self->[REQ_STATE] & RS_IN_CONTENT) {
+    DEBUG and warn "done; returning $response for ", $self->[REQ_ID];
+    $self->[REQ_POSTBACK]->($self->[REQ_RESPONSE]);
+    $self->[REQ_STATE] |= RS_POSTED;
+    #warn "state is now ", $self->[REQ_STATE];
+  }
+  elsif ($self->[REQ_STATE] & RS_IN_CONTENT) {
     # If we are streaming, send the chunk back to the client session.
     # Otherwise add the new octets to the response's content.
     # This should only add up to content-length octets total!
     if ($self->[REQ_FACTORY]->is_streaming) {
       DEBUG and warn "returning partial $response";
       $self->[REQ_POSTBACK]->($self->[REQ_RESPONSE], $self->[REQ_BUFFER]);
-    } else {
+    }
+    else {
       DEBUG and warn "adding to $response";
       $self->[REQ_RESPONSE]->add_content($self->[REQ_BUFFER]);
     }
@@ -205,8 +211,10 @@ sub add_content {
 
   my $max = $self->[REQ_FACTORY]->max_response_size;
 
-  DEBUG and warn  "REQ: request ", $self->ID,
-		  " received $self->[REQ_OCTETS_GOT] bytes; maximum is $max";
+  DEBUG and warn(
+    "REQ: request ", $self->ID,
+    " received $self->[REQ_OCTETS_GOT] bytes; maximum is $max"
+  );
 
   if (defined $max and $self->[REQ_OCTETS_GOT] > $max) {
     # We've gone over the maximum content size to return.  Chop it # back.
@@ -223,21 +231,26 @@ sub add_content {
 
   $self->return_response;
   DEBUG and do {
-    warn  "REQ: request ", $self->ID,
-	  " got $this_chunk_length octets of content...";
+    warn(
+      "REQ: request ", $self->ID,
+      " got $this_chunk_length octets of content..."
+    );
 
-    warn  "REQ: request ", $self->ID,
-	  " has $self->[REQ_OCTETS_GOT]",
-	  ( $self->[REQ_RESPONSE]->content_length()
-	    ? ( " out of " . $self->[REQ_RESPONSE]->content_length() )
-	    : ""
-	  ),
-	  " octets"
+    warn(
+      "REQ: request ", $self->ID, " has $self->[REQ_OCTETS_GOT]",
+      (
+        $self->[REQ_RESPONSE]->content_length()
+        ? ( " out of " . $self->[REQ_RESPONSE]->content_length() )
+        : ""
+      ),
+      " octets"
+    );
   };
+
   if (defined $max and $self->[REQ_OCTETS_GOT] >= $max) {
-    DEBUG and
-      warn  "REQ: request ", $self->ID,
-	    " has a full response... moving to done.";
+    DEBUG and warn(
+      "REQ: request ", $self->ID, " has a full response... moving to done."
+    );
     $self->[REQ_STATE] |= RS_DONE;
     $self->[REQ_STATE] &= ~RS_IN_CONTENT;
     return 1;
@@ -247,19 +260,18 @@ sub add_content {
 
     # Report back progress
     $self->[REQ_PROG_POSTBACK]->(
-	  $self->[REQ_OCTETS_GOT],
-	  $self->[REQ_RESPONSE]->content_length,
-	  #TODO: ugh. this is stupid. Must remove/deprecate!
-	  $buffer,
-      ) if ($self->[REQ_PROG_POSTBACK]);
-
+      $self->[REQ_OCTETS_GOT],
+      $self->[REQ_RESPONSE]->content_length,
+      #TODO: ugh. this is stupid. Must remove/deprecate!
+      $buffer,
+    ) if ($self->[REQ_PROG_POSTBACK]);
 
     # Stop reading when we have enough content.  -><- Should never be
     # greater than our content length.
     if ($self->[REQ_OCTETS_GOT] >= $self->[REQ_RESPONSE]->content_length) {
-      DEBUG and
-        warn  "REQ: request ", $self->ID,
-	      " has a full response... moving to done.";
+      DEBUG and warn(
+        "REQ: request ", $self->ID, " has a full response... moving to done."
+      );
       $self->[REQ_STATE] |= RS_DONE;
       $self->[REQ_STATE] &= ~RS_IN_CONTENT;
       return 1;
@@ -285,12 +297,13 @@ sub create_timer {
   my $kernel = $POE::Kernel::poe_kernel;
 
   my $seconds = $timeout - (time() - $self->[REQ_START_TIME]);
-  $self->[REQ_TIMER] = 
-      $kernel->delay_set (got_timeout =>
-	  $seconds, $self->ID
-	);
-  DEBUG and warn "TKO: request ", $self->ID,
-    " has timer $self->[REQ_TIMER] going off in $seconds seconds\n";
+  $self->[REQ_TIMER] = $kernel->delay_set(
+    got_timeout => $seconds, $self->ID
+  );
+  DEBUG and warn(
+    "TKO: request ", $self->ID,
+    " has timer $self->[REQ_TIMER] going off in $seconds seconds\n"
+  );
 }
 
 sub remove_timeout {
@@ -325,7 +338,8 @@ sub _set_host_header {
     # Only include the port if it's nonstandard.
     if ($new_port == 80 || $new_port == 443) {
       $request->header( Host => $new_host );
-    } else {
+    }
+    else {
       $request->header( Host => "$new_host:$new_port" );
     }
   };
@@ -374,7 +388,8 @@ sub check_redirect {
   if ($history > $max) {
     #$self->[REQ_STATE] |= RS_DONE;
     DEBUG and warn "RED: Too much redirection";
-  } else { # All fine, yield new request and mark this disabled.
+  }
+  else { # All fine, yield new request and mark this disabled.
     my $newrequest = $self->[REQ_REQUEST]->clone();
     DEBUG and warn "RED: new request $newrequest";
     $newrequest->uri($new_uri);
@@ -444,13 +459,15 @@ sub error {
 
   my $r = HTTP::Response->new($code);
   my $http_msg = status_message ($code);
-  my $m = "<html>$nl"
-      .	  "<HEAD><TITLE>Error: $http_msg</TITLE></HEAD>$nl"
-      .	  "<BODY>$nl"
-      .	  "<H1>Error: $http_msg</H1>$nl"
-      .	  "$message$nl"
-      .	  "</BODY>$nl"
-      .	  "</HTML>$nl";
+  my $m = (
+    "<html>$nl"
+    . "<HEAD><TITLE>Error: $http_msg</TITLE></HEAD>$nl"
+    . "<BODY>$nl"
+    . "<H1>Error: $http_msg</H1>$nl"
+    . "$message$nl"
+    . "</BODY>$nl"
+    . "</HTML>$nl"
+  );
 
   $r->content ($m);
   $self->[REQ_POSTBACK]->($r);
@@ -475,4 +492,3 @@ sub DESTROY {
 }
 
 1;
-

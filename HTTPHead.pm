@@ -1,3 +1,5 @@
+# $Id$
+
 package POE::Filter::HTTPHead_Line;
 use strict;
 
@@ -16,12 +18,12 @@ sub DEBUG () { 0 }
 sub new {
   my $type = shift;
 
-  my $self =
-    bless [ [],			    # FRAMING_BUFFER
-            STATE_STATUS,	    # CURRENT_STATE
-	    undef,		    # WORK_RESPONSE
-	    "0.9",		    # PROTOCOL_VERSION
-          ], $type;
+  my $self = bless [
+    [],            # FRAMING_BUFFER
+    STATE_STATUS, # CURRENT_STATE
+    undef,        # WORK_RESPONSE
+    "0.9",        # PROTOCOL_VERSION
+  ], $type;
 
   $self;
 }
@@ -38,41 +40,49 @@ sub get_one {
 
   #warn "in get_one";
   while (defined (my $line = shift (@{$self->[FRAMING_BUFFER]}))) {
-      DEBUG and warn "LINE $line";
-      if ($self->[CURRENT_STATE] == STATE_STATUS) {
-	 DEBUG and warn "in status";
-	 #expect a status line
-	 if ($line =~ m|^(?:HTTP/(\d+\.\d+) )?(\d{3})(?: (.+))?$|) {
-	    $self->[PROTOCOL_VERSION] = $1
-		if (defined $1);
-	    $self->[WORK_RESPONSE] = HTTP::Response->new ($2, $3);
-	    $self->[CURRENT_STATE] = STATE_HEADER;
-	 } else {
-	    return [undef];
-	    #return [HTTP::Response->new ('500', 'Bad Response')];
-	 }
-      } else {
-	 if ($line eq '') {
-	    $self->[CURRENT_STATE] = STATE_STATUS;
-	    DEBUG and warn "return response";
-	    return [$self->[WORK_RESPONSE]];
-	 }
-	 DEBUG and warn "in headers";
-	 unless (@{$self->[FRAMING_BUFFER]} > 0) {
-	    unshift (@{$self->[FRAMING_BUFFER]}, $line);
-	    return [];
-	 }
-	 DEBUG and warn "got more lines";
-	 while ($self->[FRAMING_BUFFER]->[0] =~ /^[\t ]/) {
-	    my $next_line = shift (@{$self->[FRAMING_BUFFER]});
-	    $next_line =~ s/^[\t ]+//;
-	    $line .= $next_line;
-	 }
-	 #warn "unfolded one: $line";
-	 if ($line =~ /^([^\x00-\x19()<>@,;:\\"\/\[\]\?={} \t]+):\s*([^\x00-\x07\x09-\x19]+)$/) {
-	    $self->[WORK_RESPONSE]->header($1, $2)
-	 }
+    DEBUG and warn "LINE $line";
+    if ($self->[CURRENT_STATE] == STATE_STATUS) {
+      DEBUG and warn "in status";
+      #expect a status line
+      if ($line =~ m|^(?:HTTP/(\d+\.\d+) )?(\d{3})(?: (.+))?$|) {
+        $self->[PROTOCOL_VERSION] = $1 if defined $1;
+        $self->[WORK_RESPONSE] = HTTP::Response->new ($2, $3);
+        $self->[CURRENT_STATE] = STATE_HEADER;
       }
+      else {
+        return [undef];
+        #return [HTTP::Response->new ('500', 'Bad Response')];
+      }
+    }
+    else {
+      if ($line eq '') {
+        $self->[CURRENT_STATE] = STATE_STATUS;
+        DEBUG and warn "return response";
+        return [$self->[WORK_RESPONSE]];
+      }
+      DEBUG and warn "in headers";
+      unless (@{$self->[FRAMING_BUFFER]} > 0) {
+        unshift (@{$self->[FRAMING_BUFFER]}, $line);
+        return [];
+      }
+      DEBUG and warn "got more lines";
+      while ($self->[FRAMING_BUFFER]->[0] =~ /^[\t ]/) {
+        my $next_line = shift (@{$self->[FRAMING_BUFFER]});
+        $next_line =~ s/^[\t ]+//;
+        $line .= $next_line;
+      }
+      #warn "unfolded one: $line";
+      if (
+        $line =~ m{
+        ^
+        ([^\x00-\x19()<>@,;:\\""\/\[\]\?={}\x20\t]+):
+        \s*([^\x00-\x07\x09-\x19]+)
+        $
+        }x
+      ) {
+        $self->[WORK_RESPONSE]->header($1, $2)
+      }
+    }
   }
   return [];
 }
@@ -106,11 +116,11 @@ POE::Filter::HTTPHead - filter data as HTTP::Response objects
 
 =head1 SYNOPSYS
 
-       $filter = POE::Filter::HTTPHead->new();
-        $arrayref_of_response_objects =
-               $filter->get($arrayref_of_raw_chunks_from_driver);
+  $filter = POE::Filter::HTTPHead->new();
+  $arrayref_of_response_objects =
+    $filter->get($arrayref_of_raw_chunks_from_driver);
 
-       $arrayref_of_leftovers = $filter->get_pending();
+  $arrayref_of_leftovers = $filter->get_pending();
 
 =head1 DESCRIPTION
 
@@ -129,7 +139,8 @@ use POE::Filter::Line;
 sub new {
   my $type = shift;
 
-  my $self = $type->SUPER::new (Filters => [
+  my $self = $type->SUPER::new(
+    Filters => [
       POE::Filter::Line->new,
       POE::Filter::HTTPHead_Line->new,
     ],
@@ -158,7 +169,6 @@ sub get_pending {
 
 sub put {
   my $self = shift;
-
   return $self->[0]->[1]->put (@_);
 }
 

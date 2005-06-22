@@ -1,16 +1,19 @@
+# $Id$
+# vim: filetype=perl
+
 use strict;
 use warnings;
 
 use Test::More tests => 8;
 
 use POE qw(
-		Wheel::ReadWrite
-		Driver::SysRW
-		Filter::Line
-		Filter::Stream
-		Filter::HTTPHead
-		Filter::XML
-	);
+  Wheel::ReadWrite
+  Driver::SysRW
+  Filter::Line
+  Filter::Stream
+  Filter::HTTPHead
+  Filter::XML
+);
 
 ok(defined $INC{"POE/Filter/HTTPHead.pm"}, "loaded");
 
@@ -21,32 +24,32 @@ autoflush STDOUT 1;
 my $request_number = 8;
 
 my $session = POE::Session->create(
-	inline_states => {
-		_start => \&start,
-		input => \&input,
-		error => \&error,
-		flushed => \&flushed,
-	},
+  inline_states => {
+    _start => \&start,
+    input => \&input,
+    error => \&error,
+    flushed => \&flushed,
+  },
 );
 
-$poe_kernel->run;
-
+POE::Kernel->run();
+exit;
 
 sub start {
-	my ($kernel, $heap) = @_[KERNEL, HEAP];
+  my ($kernel, $heap) = @_[KERNEL, HEAP];
 
-	sysseek(DATA, tell(DATA), 0);
+  sysseek(DATA, tell(DATA), 0);
 
-	my $filter = POE::Filter::HTTPHead->new;
+  my $filter = POE::Filter::HTTPHead->new;
 
-	my $wheel = POE::Wheel::ReadWrite->new (
-		Handle => \*DATA,
-		Driver => POE::Driver::SysRW->new (BlockSize => 1000),
-		InputFilter => $filter,
-		InputEvent => 'input',
-		ErrorEvent => 'error',
-	);
-	$heap->{'wheel'} = $wheel;
+  my $wheel = POE::Wheel::ReadWrite->new (
+    Handle => \*DATA,
+    Driver => POE::Driver::SysRW->new (BlockSize => 1000),
+    InputFilter => $filter,
+    InputEvent => 'input',
+    ErrorEvent => 'error',
+  );
+  $heap->{'wheel'} = $wheel;
 }
 
 sub input {
@@ -58,24 +61,25 @@ sub input {
   }
   $request_number--;
 
-  $request_number == 7 and isa_ok ($data, 'HTTP::Response', "Ok without headers");
-  $request_number == 6 and isa_ok ($data, 'HTTP::Response', "Got our object");
+  $request_number == 7 and isa_ok($data, 'HTTP::Response', "Ok sans headers");
+  $request_number == 6 and isa_ok($data, 'HTTP::Response', "Got our object");
   $request_number == 5 and ok(!defined($data), "Got a bad request");
-  $request_number == 4 and
-    ok(!defined($data->header('Connection')),
-	"Not picking up bad request headers");
-  $request_number == 3 and isa_ok ($data, 'HTTP::Response', "No HTTP version");
+  $request_number == 4 and ok(
+    !defined($data->header('Connection')),
+    "Not picking up bad request headers"
+  );
+  $request_number == 3 and isa_ok($data, 'HTTP::Response', "No HTTP version");
   if ($request_number <= 2) {
-    $heap->{wheel}->set_filter (POE::Filter::Line->new);
+    $heap->{wheel}->set_filter(POE::Filter::Line->new());
   }
 }
 
 sub error {
-	my $heap = $_[HEAP];
-	my ($type, $errno, $errmsg, $id) = @_[ARG0..$#_];
+  my $heap = $_[HEAP];
+  my ($type, $errno, $errmsg, $id) = @_[ARG0..$#_];
 
-	is($errno, 0, "got EOF");
-	delete $heap->{wheel};
+  is($errno, 0, "got EOF");
+  delete $heap->{wheel};
 }
 
 # below is a list of the heads of HTTP responses (i.e with no content)

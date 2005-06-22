@@ -1,3 +1,5 @@
+# $Id$
+
 package POE::Component::Client::HTTP;
 
 # {{{ INIT
@@ -9,7 +11,7 @@ sub DEBUG         () { 0 }
 sub DEBUG_DATA    () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.65';
+$VERSION = '0.70';
 
 use Carp qw(croak);
 use POSIX;
@@ -23,8 +25,8 @@ use POE::Component::Client::HTTP::Request qw(:states :fields);
 
 BEGIN {
   local $SIG{'__DIE__'} = 'DEFAULT';
-#TODO: move this to Client::Keepalive?
-# Allow more finely grained timeouts if Time::HiRes is available.
+  #TODO: move this to Client::Keepalive?
+  # Allow more finely grained timeouts if Time::HiRes is available.
   eval {
     require Time::HiRes;
     Time::HiRes->import("time");
@@ -39,8 +41,8 @@ use POE qw(
 );
 
 my %te_filters = (
-    chunked => 'POE::Filter::HTTPChunk',
-  );
+  chunked => 'POE::Filter::HTTPChunk',
+);
 
 # }}} INIT
 
@@ -63,7 +65,9 @@ sub spawn {
 
   my $cm = delete $params{ConnectionManager};
 
-  my $request_factory = POE::Component::Client::HTTP::RequestFactory->new (\%params);
+  my $request_factory = POE::Component::Client::HTTP::RequestFactory->new(
+    \%params
+  );
 
   croak(
     "$type doesn't know these parameters: ",
@@ -93,9 +97,9 @@ sub spawn {
       remove_request    => \&poco_weeble_remove_request,
     },
     heap => {
-      alias         => $alias,
-      factory	    => $request_factory,
-      cm	    => $cm,
+      alias   => $alias,
+      factory => $request_factory,
+      cm      => $cm,
     },
   );
 
@@ -113,8 +117,8 @@ sub poco_weeble_start {
 
   # have to do this here because it wants a current_session
   $heap->{cm} = POE::Component::Client::Keepalive->new(
-      timeout => $heap->{factory}->timeout,
-    ) unless ($heap->{cm});
+    timeout => $heap->{factory}->timeout,
+  ) unless ($heap->{cm});
 }
 
 # }}} poco_weeble_start
@@ -141,18 +145,19 @@ sub poco_weeble_pending_requests_count {
 # {{{ poco_weeble_request
 
 sub poco_weeble_request {
-  my ($kernel, $heap, $sender,
-      $response_event, $http_request, $tag, $progress_event
-    ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1, ARG2, ARG3];
+  my (
+    $kernel, $heap, $sender,
+    $response_event, $http_request, $tag, $progress_event
+  ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1, ARG2, ARG3];
 
 
-  my $request = $heap->{factory}->create_request (
-      $http_request, $response_event, $tag, $progress_event, $sender
-    );
+  my $request = $heap->{factory}->create_request(
+    $http_request, $response_event, $tag, $progress_event, $sender
+  );
   $heap->{request}->{$request->ID} = $request;
 
-# get a connection from Client::Keepalive
-  $heap->{cm}->allocate (
+  # get a connection from Client::Keepalive
+  $heap->{cm}->allocate(
     scheme => $http_request->uri->scheme,
     addr => $http_request->uri->host,
     port => $http_request->uri->port,
@@ -181,16 +186,15 @@ sub poco_weeble_connect_done {
 
     # get wheel from the connection
     my $new_wheel = $connection->start(
-	Driver       => POE::Driver::SysRW->new(BlockSize => $block_size),
-	InputFilter  => POE::Filter::HTTPHead->new(),
-	OutputFilter => POE::Filter::Stream->new(),
-	InputEvent   => 'got_socket_input',
-	FlushedEvent => 'got_socket_flush',
-	ErrorEvent   => 'got_socket_error',
-      );
+      Driver       => POE::Driver::SysRW->new(BlockSize => $block_size),
+      InputFilter  => POE::Filter::HTTPHead->new(),
+      OutputFilter => POE::Filter::Stream->new(),
+      InputEvent   => 'got_socket_input',
+      FlushedEvent => 'got_socket_flush',
+      ErrorEvent   => 'got_socket_error',
+    );
 
-    DEBUG and
-      warn "CON: request $request_id uses wheel ", $new_wheel->ID;
+    DEBUG and warn "CON: request $request_id uses wheel ", $new_wheel->ID;
 
     # Add the new wheel ID to the lookup table.
     $heap->{wheel_to_request}->{ $new_wheel->ID() } = $request_id;
@@ -199,20 +203,22 @@ sub poco_weeble_connect_done {
 
     $request->create_timer ($heap->{factory}->timeout);
     $request->send_to_wheel;
-  } else {
-    DEBUG and
-      warn "CON: Error connecting for request $request_id --- ", $_[SENDER]->ID;
+  }
+  else {
+    DEBUG and warn(
+      "CON: Error connecting for request $request_id --- ", $_[SENDER]->ID
+    );
 
-    my ($operation, $errnum, $errstr) =
-      (
-	$response->{function},
-	$response->{error_num} || '??',
-	$response->{error_str}
-      );
+    my ($operation, $errnum, $errstr) = (
+      $response->{function},
+      $response->{error_num} || '??',
+      $response->{error_str}
+    );
 
-    DEBUG and
-      warn  "CON: request $request_id encountered $operation error "
-	.   "$errnum: $errstr";
+    DEBUG and warn(
+      "CON: request $request_id encountered $operation error " .
+      "$errnum: $errstr"
+    );
 
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
@@ -253,15 +259,21 @@ sub poco_weeble_timeout {
     delete $heap->{wheel_to_request}->{$wheel_id};
   }
 
-  DEBUG and die  "TKO: request $request_id is unexpectedly zero" unless $request->[REQ_STATE];
-  DEBUG and warn "TKO: request_state = " . sprintf("%#04x\n", $request->[REQ_STATE]);
+  DEBUG and do {
+    die( "TKO: request $request_id is unexpectedly zero" )
+      unless $request->[REQ_STATE];
+    warn "TKO: request_state = " . sprintf("%#04x\n", $request->[REQ_STATE]);
+  };
 
-  if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and not $request->[REQ_STATE] & RS_POSTED) {
-
+  if (
+    $request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and
+    not $request->[REQ_STATE] & RS_POSTED
+  ) {
     #warn "request_id is $request_id, while request's id is $request->[REQ_ID]";
     _finish_request($heap, $request, 0);
     return;
-  } elsif ($request->[REQ_STATE] & RS_POSTED) {
+  }
+  elsif ($request->[REQ_STATE] & RS_POSTED) {
     DEBUG and warn "I/O: Disconnect, keepalive timeout or HTTP/1.0.";
     $request->error(408, "Request timed out") if $request->[REQ_STATE];
     return;
@@ -284,7 +296,9 @@ sub poco_weeble_io_flushed {
     return;
   }
 
-  DEBUG and warn "I/O: wheel $wheel_id (request $request_id) flushed its request...";
+  DEBUG and warn(
+    "I/O: wheel $wheel_id (request $request_id) flushed its request..."
+  );
 
   my $request = $heap->{request}->{$request_id};
   $request->[REQ_STATE] ^= RS_SENDING;
@@ -300,48 +314,51 @@ sub poco_weeble_io_flushed {
 # {{{ poco_weeble_io_error
 
 sub poco_weeble_io_error {
-    my ($kernel, $heap, $operation, $errnum, $errstr, $wheel_id) =
-      @_[KERNEL, HEAP, ARG0..ARG3];
+  my ($kernel, $heap, $operation, $errnum, $errstr, $wheel_id) =
+    @_[KERNEL, HEAP, ARG0..ARG3];
 
-    DEBUG and
-      warn "I/O: wheel $wheel_id encountered $operation error $errnum: $errstr";
+  DEBUG and
+    warn "I/O: wheel $wheel_id encountered $operation error $errnum: $errstr";
 
-    # Drop the wheel.
-    my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
-    #K or die "!!!: unexpectedly undefined request ID" unless defined $request_id;
+  # Drop the wheel.
+  my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
+  #K or die "!!!: unexpectedly undefined request ID" unless defined $request_id;
 
-    if ($request_id ) {
+  if ($request_id ) {
 
-        DEBUG and warn "I/O: removing request $request_id";
-        my $request = delete $heap->{request}->{$request_id};
-	$request->remove_timeout;
+    DEBUG and warn "I/O: removing request $request_id";
+    my $request = delete $heap->{request}->{$request_id};
+    $request->remove_timeout;
 
-        # If there was a non-zero error, then something bad happened.  Post
-        # an error response back.
-        if ($errnum) {
-            $request->error(400, "$operation error $errnum: $errstr");
-            return;
-        }
-
-        # Otherwise the remote end simply closed.  If we've got a
-        # pending response, then post it back to the client.
-	DEBUG and warn "STATE is ", $request->[REQ_STATE];
-	# except when we're redirected
-	return if ($request->[REQ_STATE] == RS_REDIRECTED);
-        if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and not $request->[REQ_STATE] & RS_POSTED) {
-
-            _finish_request($heap, $request, 0);
-
-            return;
-        } elsif ($request->[REQ_STATE] & RS_POSTED) {
-            DEBUG and
-		warn "I/O: Disconnect, remote keepalive timeout or HTTP/1.0.";
-            return;
-        }
-
-        # We haven't built a proper response.  Send back an error.
-        $request->error (400, "incomplete response $request_id");
+    # If there was a non-zero error, then something bad happened.  Post
+    # an error response back.
+    if ($errnum) {
+      $request->error(400, "$operation error $errnum: $errstr");
+      return;
     }
+
+    # Otherwise the remote end simply closed.  If we've got a
+    # pending response, then post it back to the client.
+    DEBUG and warn "STATE is ", $request->[REQ_STATE];
+
+    # except when we're redirected
+    return if ($request->[REQ_STATE] == RS_REDIRECTED);
+
+    if (
+      $request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and
+      not $request->[REQ_STATE] & RS_POSTED
+    ) {
+      _finish_request($heap, $request, 0);
+      return;
+    }
+    elsif ($request->[REQ_STATE] & RS_POSTED) {
+      DEBUG and warn "I/O: Disconnect, remote keepalive timeout or HTTP/1.0.";
+      return;
+    }
+
+    # We haven't built a proper response.  Send back an error.
+    $request->error (400, "incomplete response $request_id");
+  }
 }
 
 # }}} poco_weeble_io_error
@@ -371,6 +388,7 @@ sub poco_weeble_io_read {
     DEBUG and warn "input for request that was redirected";
     return;
   }
+
 # {{{ HEAD
 
   # The very first line ought to be status.  If it's not, then it's
@@ -378,10 +396,14 @@ sub poco_weeble_io_read {
   if ($request->[REQ_STATE] & RS_IN_HEAD) {
     if (defined $input) {
       $input->request ($request->[REQ_REQUEST]);
-      #warn "INPUT for ", $request->[REQ_REQUEST]->uri, " is \n",$input->as_string;
-    } else {
+      #warn(
+      #  "INPUT for ", $request->[REQ_REQUEST]->uri, " is \n",$input->as_string
+      #)
+    }
+    else {
       #warn "NO INPUT";
     }
+
     # FIXME: LordVorp gets here without $input being a HTTP::Response
     $request->[REQ_RESPONSE] = $input;
 
@@ -389,34 +411,43 @@ sub poco_weeble_io_read {
     # FIXME: #12363
     #        Make sure we finish even when it isn't one of these,
     #        but there is no content.
-    if ($request->[REQ_REQUEST]->method eq 'HEAD'
-     || $input->code =~ /^(?:1|[23]04)/) {
+    if (
+      $request->[REQ_REQUEST]->method eq 'HEAD'
+      or $input->code =~ /^(?:1|[23]04)/
+    ) {
       $request->[REQ_STATE] |= RS_DONE;
-    } else {
+    }
+    else {
       $request->[REQ_STATE] = RS_IN_CONTENT;
       if (my $newrequest = $request->check_redirect) {
-	#FIXME: probably want to find out when the content from this
-	#       request is in, and only then do the new request, so we
-	#       can reuse the connection.
-	DEBUG and warn "Redirected $request_id ", $input->code;
-	$kernel->yield (request => $request,
-	  $newrequest, "_redir_".$request->ID, $request->[REQ_PROG_POSTBACK]);
-	return
+        #FIXME: probably want to find out when the content from this
+        #       request is in, and only then do the new request, so we
+        #       can reuse the connection.
+        DEBUG and warn "Redirected $request_id ", $input->code;
+        $kernel->yield (
+          request =>
+          $request,
+          $newrequest,
+          "_redir_".$request->ID,
+          $request->[REQ_PROG_POSTBACK]
+        );
+        return
       }
 
       my $filter;
       my $te = $input->header('Transfer-Encoding');
       if (defined $te) {
-	$filter = POE::Filter::Stackable->new;
-	my @te = split(/\s*,\s*/, lc($te));
-	while (my $encoding = pop @te) {
-	  my $fclass = $te_filters{$encoding};
-	  last unless (defined $fclass);
-	  $filter->push ($fclass->new);
-	}
-	$input->header('Transfer-Encoding', join(', ', @te));
-      } else {
-	$filter = POE::Filter::Stream->new;
+        $filter = POE::Filter::Stackable->new;
+        my @te = split(/\s*,\s*/, lc($te));
+        while (my $encoding = pop @te) {
+          my $fclass = $te_filters{$encoding};
+          last unless (defined $fclass);
+          $filter->push ($fclass->new);
+        }
+        $input->header('Transfer-Encoding', join(', ', @te));
+      }
+      else {
+        $filter = POE::Filter::Stream->new;
       }
       # do this last, because it triggers a read
       $request->wheel->set_input_filter ($filter);
@@ -433,7 +464,8 @@ sub poco_weeble_io_read {
     if (UNIVERSAL::isa ($input, 'HTTP::Response')) {
       # there was a problem in the input filter
       # $request->close_connection;
-    } else {
+    }
+    else {
       my $is_done = $request->add_content ($input);
     }
   }
@@ -443,8 +475,10 @@ sub poco_weeble_io_read {
 # {{{ deliver reponse if complete
 
 # POST response without disconnecting
-  if ($request->[REQ_STATE] & RS_DONE
-      and not $request->[REQ_STATE] & RS_POSTED) {
+  if (
+    $request->[REQ_STATE] & RS_DONE and
+    not $request->[REQ_STATE] & RS_POSTED
+  ) {
     $request->remove_timeout;
     _finish_request($heap, $request, 1);
   }
@@ -492,8 +526,10 @@ sub _finish_request {
   my $request_id = $request->ID;
   if (DEBUG) {
     my ($pkg, $file, $line) = caller();
-    warn  "XXX: calling _finish_request(request id = $request_id)"
-    	. "at $file line $line";
+    warn(
+      "XXX: calling _finish_request(request id = $request_id)" .
+      "at $file line $line"
+    );
   }
 
   # If we're streaming, the response is HTTP::Response without
@@ -519,7 +555,8 @@ sub _finish_request {
     $request->remove_timeout;
 
     $request->timer ($alarm_id);
-  } else {
+  }
+  else {
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
   }
@@ -537,7 +574,6 @@ sub poco_weeble_remove_request {
   }
 }
 #}}} _remove_request
-
 
 1;
 
