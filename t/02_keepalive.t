@@ -144,6 +144,7 @@ sub client_got_response {
   };
 
   my $request_path = $http_request->uri->path . ''; # stringify
+  my $request_uri  = $http_request->uri       . ''; # stringify
 
   if (defined $http_response->code) {
     my $response_string = $http_response->as_string();
@@ -189,7 +190,7 @@ sub client_got_response {
         );
       }
 
-      if ($response_string =~ /dogs/) {
+      if ($request_uri =~ /=dogs$/) {
         $test_results[5] = 'ok 6';
         $kernel->post( chunk => request => got_response =>
           # GET 'http://poe.perl.org/misc/test.html'
@@ -202,7 +203,7 @@ sub client_got_response {
         );
       }
 
-      if ($response_string =~ /cats/) {
+      if ($request_uri =~ /=cats$/) {
         $test_results[6] = 'ok 7';
         $kernel->post( chunk => request => got_response =>
           # GET 'http://poe.perl.org/misc/test.html'
@@ -237,13 +238,13 @@ POE::Component::Client::HTTP->spawn(
 
 # Create a weeble component.
 POE::Component::Client::HTTP->spawn(
-    Alias             => 'chunk',
-    MaxSize           => MAX_BIG_REQUEST_SIZE,
-    Timeout           => 5,
-    FollowRedirects   => 1,
-    Protocol          => 'HTTP/1.1',
-    ConnectionManager => $cm,
-  );
+  Alias             => 'chunk',
+  MaxSize           => MAX_BIG_REQUEST_SIZE,
+  Timeout           => 5,
+  FollowRedirects   => 1,
+  Protocol          => 'HTTP/1.1',
+  ConnectionManager => $cm,
+);
 
 # Create a session that will make some requests.
 POE::Session->create(

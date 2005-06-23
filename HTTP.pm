@@ -156,13 +156,21 @@ sub poco_weeble_request {
   );
   $heap->{request}->{$request->ID} = $request;
 
+  my @timeout;
+  if ($heap->{factory}->timeout()) {
+    @timeout = (
+      timeout => $heap->{factory}->timeout()
+    );
+  }
+
   # get a connection from Client::Keepalive
   $heap->{cm}->allocate(
-    scheme => $http_request->uri->scheme,
-    addr => $http_request->uri->host,
-    port => $http_request->uri->port,
+    scheme  => $http_request->uri->scheme,
+    addr    => $http_request->uri->host,
+    port    => $http_request->uri->port,
     context => $request->ID,
-    event => 'got_connect_done',
+    event   => 'got_connect_done',
+    @timeout,
   );
 }
 

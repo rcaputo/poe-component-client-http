@@ -29,64 +29,80 @@ sub client_start {
 
   $kernel->post(
     weeble => request => got_response =>
-    GET 'http://poe.perl.org/misc/test.html', Connection => 'close'
+    GET('http://poe.perl.org/misc/test.html', Connection => 'close'),
   );
 
 
   $kernel->post(
     weeble => request => got_response => (
-      POST 'http://poe.perl.org/misc/test.cgi',
-      [
-        cgi_field_one => '111',
-        cgi_field_two => '222',
-        cgi_field_six => '666',
-        cgi_field_ten => 'AAA',
-      ] # , Connection => 'close',
-    )
+      POST(
+        'http://poe.perl.org/misc/test.cgi',
+        [
+          cgi_field_one => '111',
+          cgi_field_two => '222',
+          cgi_field_six => '666',
+          cgi_field_ten => 'AAA',
+        ] # , Connection => 'close',
+      ),
+    ),
   );
 
   $kernel->post(
     weeble => request => got_response =>
-    GET( 'http://poe.perl.org/misc/test.cgi?cgi_field_fiv=555' ),
-    Connection => 'close'
+    GET(
+      'http://poe.perl.org/misc/test.cgi?cgi_field_fiv=555',
+      Connection => 'close',
+    ),
   );
 
 
-  my $secure_request = GET 'https://sourceforge.net/projects/poe/';
+  my $secure_request = GET(
+    'https://sourceforge.net/projects/poe/',
+    Connection => 'close',
+  );
   $kernel->post(
     weeble => request => got_response =>
     $secure_request,
-    Connection => 'close'
   );
 
   $kernel->post(
     weeble => request => got_response =>
-    GET('http://poe.perl.org'),
-    Connection => 'close'
+    GET(
+      'http://poe.perl.org',
+      Connection => 'close',
+    ),
   );
 
   $kernel->post(
     weeble => request => got_response =>
-    GET('http://foo.poe.perl.org/'),
-    Connection => 'close'
+    GET(
+      'http://foo.poe.perl.org/',
+      Connection => 'close',
+    ),
   );
 
   $kernel->post(
     weeble => request => got_big_response =>
-    GET('http://poe.perl.org/misc/stream-test.cgi'),
-    Connection => 'close'
+    GET(
+      'http://poe.perl.org/misc/stream-test.cgi',
+      Connection => 'close',
+    ),
   );
 
   $kernel->post(
     streamer => request => got_stream_response =>
-    GET('http://poe.perl.org/misc/stream-test.cgi'),
-    Connection => 'close'
+    GET(
+      'http://poe.perl.org/misc/stream-test.cgi',
+      Connection => 'close',
+    ),
   );
 
   $kernel->post(
     redirector => request => got_redir_response =>
-    GET('http://poe.perl.org/misc/redir-test.cgi'),
-    Connection => 'close'
+    GET(
+      'http://poe.perl.org/misc/redir-test.cgi',
+      Connection => 'close',
+    ),
   );
 
   $kernel->yield('check_counts', 7);
