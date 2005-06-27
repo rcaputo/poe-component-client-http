@@ -11,7 +11,7 @@ sub DEBUG         () { 0 }
 sub DEBUG_DATA    () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.70';
+$VERSION = '0.7001';
 
 use Carp qw(croak);
 use POSIX;

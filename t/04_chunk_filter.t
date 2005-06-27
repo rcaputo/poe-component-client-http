@@ -14,7 +14,6 @@ use POE qw(
   Filter::Stream
   Filter::HTTPHead
   Filter::HTTPChunk
-  Filter::XML
 );
 
 ok (defined $INC{"POE/Filter/HTTPChunk.pm"}, "loaded");

@@ -12,7 +12,6 @@ use POE qw(
   Filter::Line
   Filter::Stream
   Filter::HTTPHead
-  Filter::XML
 );
 
 ok(defined $INC{"POE/Filter/HTTPHead.pm"}, "loaded");
