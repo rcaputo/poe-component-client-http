@@ -422,6 +422,10 @@ sub poco_weeble_io_read {
     if (
       $request->[REQ_REQUEST]->method eq 'HEAD'
       or $input->code =~ /^(?:1|[23]04)/
+      or (
+        defined($input->content_length())
+        and $input->content_length() == 0
+      )
     ) {
       $request->[REQ_STATE] |= RS_DONE;
     }
