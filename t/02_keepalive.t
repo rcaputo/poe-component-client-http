@@ -43,10 +43,10 @@ sub client_start {
     # GET 'http://poe.perl.org/misc/test.html'
 
     # one packet, multiple chunks
-    # GET 'http://www.searchrequest.net/'
+    # (need an URL)
 
     # BIG chunked response
-    # GET 'http://www.dack.com/'
+    # (need an URL)
 
     # CHUNKED WITH REDIRECT
     GET(
@@ -55,10 +55,10 @@ sub client_start {
     ),
 
     # CHUNKED W/O REDIRECT
-    # GET('http://www.content.overture.com/d/', Connection => 'close')
+    # GET("need an url", Connection => 'close')
 
     # ONLY redirect
-    # GET 'http://devel.exitexchange.com/scripts/poe_redir'
+    # GET "need an url here"
   );
 
   #$kernel->yield('check_counts', 2, 2);
@@ -194,8 +194,6 @@ sub client_got_response {
         $test_results[5] = 'ok 6';
         $kernel->post( chunk => request => got_response =>
           # GET 'http://poe.perl.org/misc/test.html'
-          # GET 'http://www.searchrequest.net/'
-          # GET 'http://www.dack.com/'
           GET(
             'http://exit-val.looksmart.com/r_search?isp=exi&key=cats',
             Connection => 'close',
@@ -207,8 +205,6 @@ sub client_got_response {
         $test_results[6] = 'ok 7';
         $kernel->post( chunk => request => got_response =>
           # GET 'http://poe.perl.org/misc/test.html'
-          # GET 'http://www.searchrequest.net/'
-          # GET 'http://www.dack.com/'
           GET(
             'http://www.overture.com/images-affiliates/befree/ologo.gif',
             Connection => 'close',
