@@ -29,49 +29,13 @@ sub client_start {
   DEBUG and warn "client starting...\n";
 
   $kernel->post( weeble => request => got_first_response =>
-    #GET 'http://poe.perl.org/misc/test.html'
     GET(
-      'http://devel.exitexchange.com/~rob/test.html',
+      "http://poe.perl.org/misc/test.cgi?TESTA",
       Connection => "Keep-Alive",
     ),
   );
 
   $heap->{ka_count} = 5;
-
-  $kernel->post(
-    chunk => request => got_response =>
-    # GET 'http://poe.perl.org/misc/test.html'
-
-    # one packet, multiple chunks
-    # (need an URL)
-
-    # BIG chunked response
-    # (need an URL)
-
-    # CHUNKED WITH REDIRECT
-    GET(
-      'http://www.overture.com/',
-      Connection => 'close',
-    ),
-
-    # CHUNKED W/O REDIRECT
-    # GET("need an url", Connection => 'close')
-
-    # ONLY redirect
-    # GET "need an url here"
-  );
-
-  #$kernel->yield('check_counts', 2, 2);
-}
-
-sub client_check_counts {
-  my ($kernel, $test_number, $expected_count) = @_[KERNEL, ARG0, ARG1];
-
-  # a better test would be to also keep track of the responses we are
-  # receiving and checking that pending_requests_count decrements properly.
-  my $count = $kernel->call( weeble => 'pending_requests_count' );
-  $test_results[$test_number-1] = "ok $test_number"
-    if $expected_count == $count;
 }
 
 sub client_stop {
@@ -108,13 +72,13 @@ sub client_got_first_response {
   return unless $request_path =~ /\/test\.html$/;
   return unless $heap->{ka_count}--;
 
-  $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
+  $test_results[0] = 'ok 1';
 
   # Send a keep-alive request.
   $kernel->post(
     weeble => request => got_response =>
     GET(
-      "http://poe.perl.org/misc/test.cgi?TEST1",
+      "http://poe.perl.org/misc/test.html",
       Connection => "Keep-Alive",
     ),
   );
@@ -144,11 +108,6 @@ sub client_got_response {
   my $request_uri  = $http_request->uri       . ''; # stringify
 
   return unless defined $http_response->code();
-
-  if ($http_response->code == 404) {
-    $test_results[7] = 'ok 8' if $request_path =~ /ologo\.gif$/;
-    return;
-  }
 
   my $response_string = $http_response->as_string();
 
@@ -199,7 +158,7 @@ sub client_got_response {
     $test_results[4] = 'ok 5';
     $kernel->post( chunk => request => got_response =>
       GET(
-        'http://exit-val.looksmart.com/r_search?isp=exi&key=dogs',
+        "http://poe.perl.org/misc/test.cgi?DOGS",
         Connection => 'close',
       ),
     );
@@ -207,26 +166,32 @@ sub client_got_response {
   }
 
   # Received chunked response.  Make another chunked request.
-  if ($request_uri =~ /=dogs$/) {
+  if ($response_string =~ /DOGS/) {
     $test_results[5] = 'ok 6';
     $kernel->post( chunk => request => got_response =>
       GET(
-        'http://exit-val.looksmart.com/r_search?isp=exi&key=cats',
+        "http://poe.perl.org/misc/test.cgi?CATS",
         Connection => 'close',
       ),
     );
     return;
   }
 
-  # Make a third chunked request.
-  if ($request_uri =~ /=cats$/) {
+  # Make a chunked redirection test.
+  if ($response_string =~ /CATS/) {
     $test_results[6] = 'ok 7';
     $kernel->post( chunk => request => got_response =>
       GET(
-        'http://www.overture.com/images-affiliates/befree/ologo.gif',
+        'http://poe.perl.org/misc/redir-test.cgi',
         Connection => 'close',
       ),
     );
+    return;
+  }
+
+  # Chunked redirection was fine.  Hey, we're done!
+  if ($request_uri =~ /redir-test/ and $response_string =~ /Test Page/) {
+    $test_results[7] = 'ok 8';
     return;
   }
 }
@@ -263,7 +228,6 @@ POE::Session->create(
     got_big_response    => \&client_got_big_response,
     got_stream_response => \&client_got_stream_response,
     got_redir_response  => \&client_got_redir_response,
-    check_counts        => \&client_check_counts,
   },
 );
 
