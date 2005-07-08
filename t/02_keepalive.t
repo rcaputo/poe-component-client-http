@@ -90,10 +90,8 @@ sub client_got_first_response {
   my $http_request  = $request_packet->[0];
   my $http_response = $response_packet->[0];
 
-  # DEBUG and "client FIRST_RESPONSE: START";
-
   DEBUG and do {
-    warn "client got request...\n";
+    warn "got_first_response...\n";
 
     my $response_string = $http_response->as_string();
     $response_string =~ s/^/| /mg;
@@ -105,22 +103,21 @@ sub client_got_first_response {
 
   my $request_path = $http_request->uri->path . ''; # stringify
 
-  if (defined $http_response->code) {
-    my $response_string = $http_response->as_string();
-    if ($http_response->code == 200) {
-      $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
+  return unless defined $http_response->code;
+  return unless $http_response->code == 200;
+  return unless $request_path =~ /\/test\.html$/;
+  return unless $heap->{ka_count}--;
 
-      $kernel->post(
-        weeble => request => got_response =>
-        GET(
-          'http://devel.exitexchange.com/~rob/test1.html',
-          Connection => "Keep-Alive",
-        ),
-      ) if $request_path =~ /\/test\.html$/ and $heap->{ka_count}--;
-    }
-  }
+  $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
 
-  # DEBUG and "client FIRST_RESPONSE: DONE";
+  # Send a keep-alive request.
+  $kernel->post(
+    weeble => request => got_response =>
+    GET(
+      "http://poe.perl.org/misc/test.cgi?TEST1",
+      Connection => "Keep-Alive",
+    ),
+  );
 }
 
 sub client_got_response {
@@ -146,78 +143,92 @@ sub client_got_response {
   my $request_path = $http_request->uri->path . ''; # stringify
   my $request_uri  = $http_request->uri       . ''; # stringify
 
-  if (defined $http_response->code) {
-    my $response_string = $http_response->as_string();
-    if ($http_response->code == 200) {
-      $test_results[0] = 'ok 1' if $request_path =~ m/\/test\.html$/;
+  return unless defined $http_response->code();
 
-      $kernel->post(
-        weeble => request => got_response =>
-        GET(
-          'http://devel.exitexchange.com/~rob/test2.html',
-          Connection => "Keep-Alive",
-        ),
-      ) if $request_path =~ /\/test1\.html$/ and $heap->{ka_count}--;
-
-      $test_results[1] = 'ok 2' if $response_string =~ /TEST1/;
-
-      if ($response_string =~ /TEST2/) {
-        $test_results[2] = 'ok 3';
-        $kernel->post(
-          weeble => request => got_response =>
-          GET('http://devel.exitexchange.com/~rob/test3.html'),
-        ) if $heap->{ka_count}--;
-      }
-
-      if ($response_string =~ /TEST3/) {
-        $test_results[3] = 'ok 4';
-        $kernel->post(
-          weeble => request => got_response =>
-          GET(
-            'http://devel.exitexchange.com/~rob/test4.html',
-            Connection => "Close"
-          ),
-        );
-      }
-
-      if ($response_string =~ /TEST4/) {
-        $test_results[4] = 'ok 5';
-        $kernel->post( chunk => request => got_response =>
-          GET(
-            'http://exit-val.looksmart.com/r_search?isp=exi&key=dogs',
-            Connection => 'close',
-          ),
-        );
-      }
-
-      if ($request_uri =~ /=dogs$/) {
-        $test_results[5] = 'ok 6';
-        $kernel->post( chunk => request => got_response =>
-          # GET 'http://poe.perl.org/misc/test.html'
-          GET(
-            'http://exit-val.looksmart.com/r_search?isp=exi&key=cats',
-            Connection => 'close',
-          ),
-        );
-      }
-
-      if ($request_uri =~ /=cats$/) {
-        $test_results[6] = 'ok 7';
-        $kernel->post( chunk => request => got_response =>
-          # GET 'http://poe.perl.org/misc/test.html'
-          GET(
-            'http://www.overture.com/images-affiliates/befree/ologo.gif',
-            Connection => 'close',
-          ),
-        );
-      }
-    }
-    elsif ($http_response->code == 404) {
-      $request_path;
-      $test_results[7] = 'ok 8' if $request_path =~ /ologo\.gif$/;
-    }
+  if ($http_response->code == 404) {
+    $test_results[7] = 'ok 8' if $request_path =~ /ologo\.gif$/;
+    return;
   }
-  # DEBUG and "client SECOND_RESPONSE: DONE";
+
+  my $response_string = $http_response->as_string();
+
+  return unless $http_response->code == 200;
+
+  # Received a keep-alive response.  Send another, and test that the
+  # socket is reused.
+  if ($response_string =~ /TEST1/ and $heap->{ka_count}--) {
+    $test_results[1] = 'ok 2';
+    $kernel->post(
+      weeble => request => got_response =>
+      GET(
+        "http://poe.perl.org/misc/test.cgi?TEST2",
+        Connection => "Keep-Alive",
+      ),
+    );
+    return;
+  }
+
+  # Received a second keep-alive response.  Send a request with no
+  # Connection header.
+  if ($response_string =~ /TEST2/ and $heap->{ka_count}--) {
+    $test_results[2] = 'ok 3';
+    $kernel->post(
+      weeble => request => got_response =>
+      GET("http://poe.perl.org/misc/test.cgi?TEST3"),
+    );
+    return;
+  }
+
+  # Received response from request without Connection header.  Send a
+  # close-after-response request.
+  if ($response_string =~ /TEST3/) {
+    $test_results[3] = 'ok 4';
+    $kernel->post(
+      weeble => request => got_response =>
+      GET(
+        "http://poe.perl.org/misc/test.cgi?TEST4",
+        Connection => "Close"
+      ),
+    );
+    return;
+  }
+
+  # Received close-after-response request.  Send a request to test
+  # chunking.
+  if ($response_string =~ /TEST4/) {
+    $test_results[4] = 'ok 5';
+    $kernel->post( chunk => request => got_response =>
+      GET(
+        'http://exit-val.looksmart.com/r_search?isp=exi&key=dogs',
+        Connection => 'close',
+      ),
+    );
+    return;
+  }
+
+  # Received chunked response.  Make another chunked request.
+  if ($request_uri =~ /=dogs$/) {
+    $test_results[5] = 'ok 6';
+    $kernel->post( chunk => request => got_response =>
+      GET(
+        'http://exit-val.looksmart.com/r_search?isp=exi&key=cats',
+        Connection => 'close',
+      ),
+    );
+    return;
+  }
+
+  # Make a third chunked request.
+  if ($request_uri =~ /=cats$/) {
+    $test_results[6] = 'ok 7';
+    $kernel->post( chunk => request => got_response =>
+      GET(
+        'http://www.overture.com/images-affiliates/befree/ologo.gif',
+        Connection => 'close',
+      ),
+    );
+    return;
+  }
 }
 
 #------------------------------------------------------------------------------
