@@ -285,6 +285,7 @@ sub timer {
 
   # do it this way so we can set REQ_TIMER to undef
   if (@_ == 2) {
+    die "overwriting timer $self->[REQ_TIMER]" if $self->[REQ_TIMER];
     $self->[REQ_TIMER] = $timer;
   }
   return $self->[REQ_TIMER];
@@ -314,6 +315,7 @@ sub remove_timeout {
     my $kernel = $POE::Kernel::poe_kernel;
     DEBUG and warn "REQ: Removing timer $alarm_id";
     $kernel->alarm_remove($alarm_id);
+    $self->[REQ_TIMER] = undef;
   }
 }
 

@@ -258,7 +258,7 @@ sub poco_weeble_timeout {
   }
 
   DEBUG and warn "TKO: request $request_id has timer ", $request->timer;
-  $request->timer(undef);
+  $request->remove_timeout();
 
   # There's a wheel attached to the request.  Shut it down.
   if (defined $request->wheel) {
@@ -561,12 +561,11 @@ sub _finish_request {
     #wait a bit with removing the request, so there's
     #time to receive the EOF event in case the connection
     #gets closed.
-    my $alarm_id = $poe_kernel->delay_set ('remove_request', 0.5, $request_id);
+    my $alarm_id = $poe_kernel->delay_set('remove_request', 0.5, $request_id);
 
     # remove the old timeout first
-    $request->remove_timeout;
-
-    $request->timer ($alarm_id);
+    $request->remove_timeout();
+    $request->timer($alarm_id);
   }
   else {
     DEBUG and warn "I/O: removing request $request_id";
