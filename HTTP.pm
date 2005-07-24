@@ -127,7 +127,8 @@ sub poco_weeble_start {
 
 sub poco_weeble_stop {
   my $heap = shift;
-  delete $heap->{request};
+  my $request = delete $heap->{request};
+	$request->remove_timeout() if $request;
   DEBUG and warn "$heap->{alias} stopped.";
 }
 
@@ -230,6 +231,7 @@ sub poco_weeble_connect_done {
 
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
+		$request->remove_timeout();
 
     # Post an error response back to the requesting session.
     $request->connect_error("$operation error $errnum: $errstr");
@@ -570,6 +572,7 @@ sub _finish_request {
   else {
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
+		$request->remove_timeout() if $request;
   }
 }
 
@@ -580,8 +583,9 @@ sub poco_weeble_remove_request {
   my ($kernel, $heap, $request_id) = @_[KERNEL, HEAP, ARG0];
 
   my $request = delete $heap->{request}->{$request_id};
-  if (DEBUG and defined $request) {
-    warn "I/O: removed request $request_id";
+	if (defined $request) {
+    DEBUG and warn "I/O: removed request $request_id";
+		$request->remove_timeout();
   }
 }
 #}}} _remove_request
