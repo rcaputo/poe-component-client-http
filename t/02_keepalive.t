@@ -8,7 +8,7 @@ use HTTP::Request::Common qw(GET POST);
 sub POE::Kernel::ASSERT_DEFAULT () { 1 }
 use POE qw(Component::Client::HTTP Component::Client::Keepalive);
 
-sub DEBUG () { 0 }
+sub DEBUG () { 1 }
 
 sub MAX_BIG_REQUEST_SIZE  () { 4096 }
 sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
@@ -69,7 +69,7 @@ sub client_got_first_response {
 
   return unless defined $http_response->code;
   return unless $http_response->code == 200;
-  return unless $request_path =~ /\/test\.html$/;
+  return unless $request_path =~ /\/test\.cgi$/;
   return unless $heap->{ka_count}--;
 
   $test_results[0] = 'ok 1';
@@ -78,7 +78,7 @@ sub client_got_first_response {
   $kernel->post(
     weeble => request => got_response =>
     GET(
-      "http://poe.perl.org/misc/test.html",
+      "http://poe.perl.org/misc/test.cgi?TEST1",
       Connection => "Keep-Alive",
     ),
   );
