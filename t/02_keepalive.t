@@ -8,7 +8,7 @@ use HTTP::Request::Common qw(GET POST);
 sub POE::Kernel::ASSERT_DEFAULT () { 1 }
 use POE qw(Component::Client::HTTP Component::Client::Keepalive);
 
-sub DEBUG () { 1 }
+sub DEBUG () { 0 }
 
 sub MAX_BIG_REQUEST_SIZE  () { 4096 }
 sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
