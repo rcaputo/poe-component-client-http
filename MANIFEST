@@ -17,3 +17,4 @@ t/05_request.t
 t/06_factory.t
 t/50_davis_zerolength.t
 t/51_santos_status.t
+t/52_reiss_bad_length.t
