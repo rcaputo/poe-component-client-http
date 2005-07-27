@@ -15,11 +15,13 @@ sub DEBUG () { 0 }
 sub MAX_BIG_REQUEST_SIZE  () { 4096 }
 sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
 
-use Test::More tests => 13;
+use Test::More tests => 14;
 $| = 1;
 
 my $cm1 = POE::Component::Client::Keepalive->new;
 #my $cm2 = POE::Component::Client::Keepalive->new;
+
+my $resp_count = 0;
 
 
 sub client_start {
@@ -104,8 +106,18 @@ sub client_start {
       Connection => 'close',
     ),
   );
+  
+  # this uses a call instead of yield
+  # so that the error response it propagates
+  # is sent before check_counts is called
+  $kernel->call(
+    weeble => request => got_response =>
+    GET( 
+      'http:withouthost',
+    )
+  );
 
-  $kernel->yield('check_counts', 7);
+  $kernel->yield( check_counts => 8 );
 }
 
 
@@ -114,7 +126,7 @@ sub client_check_counts {
 
   # a better test would be to also keep track of the responses we are
   # receiving and checking that pending_requests_count decrements properly.
-  my $count = $kernel->call( weeble => 'pending_requests_count' );
+  my $count = $kernel->call( weeble => 'pending_requests_count' ) + $resp_count;
   is ($count, $expected_count, "have enough requests pending");
 }
 
@@ -132,6 +144,8 @@ sub client_got_response {
   ];
   my $http_request  = $request_packet->[0];
   my $http_response = $response_packet->[0];
+
+  ++$resp_count;
 
   DEBUG and do {
     warn "client got request...\n";
@@ -159,6 +173,9 @@ sub client_got_response {
     elsif ($http_response->code == 500) {
       like($response_string, qr/foo\.poe\.perl\.org/, 'request 6');
     }
+    elsif ($http_response->code == 400) {
+      ok("" eq $http_request->uri->host, '400 for malformed request 10');
+    }
   }
 }
 
@@ -166,6 +183,8 @@ sub client_got_big_response {
   my ($heap, $request_packet, $response_packet) = @_[HEAP, ARG0, ARG1];
   my $http_request  = $request_packet->[0];
   my $http_response = $response_packet->[0];
+
+  ++$resp_count;
 
   DEBUG and do {
     warn "client got big request...\n";

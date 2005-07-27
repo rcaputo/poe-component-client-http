@@ -164,15 +164,23 @@ sub poco_weeble_request {
     );
   }
 
-  # get a connection from Client::Keepalive
-  $heap->{cm}->allocate(
-    scheme  => $http_request->uri->scheme,
-    addr    => $http_request->uri->host,
-    port    => $http_request->uri->port,
-    context => $request->ID,
-    event   => 'got_connect_done',
-    @timeout,
-  );
+  
+  eval {
+      # get a connection from Client::Keepalive
+      $heap->{cm}->allocate(
+        scheme  => $http_request->uri->scheme,
+        addr    => $http_request->uri->host,
+        port    => $http_request->uri->port,
+        context => $request->ID,
+        event   => 'got_connect_done',
+        @timeout,
+      );
+  };
+  if ($@) {
+      delete $heap->{request}->{$request->ID};
+      # we can reach here for things like host being invalid.
+      $request->error(400, $@);
+  }
 }
 
 # }}} poco_weeble_request
