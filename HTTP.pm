@@ -483,7 +483,7 @@ sub poco_weeble_io_read {
 
   # We're in a content state.
   if ($request->[REQ_STATE] & RS_IN_CONTENT) {
-    if (UNIVERSAL::isa ($input, 'HTTP::Response')) {
+		if (ref($input) and UNIVERSAL::isa($input, 'HTTP::Response')) {
       # there was a problem in the input filter
       # $request->close_connection;
     }

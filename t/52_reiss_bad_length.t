@@ -1,4 +1,5 @@
 #!/usr/bin/perl
+# vim: filetype=perl
 
 # There are cases where POE::Component::Client::HTTP generates no
 # responses.  This exercises some of them.
@@ -11,7 +12,7 @@ use Socket '$CRLF';
 use HTTP::Request::Common 'GET';
 
 # The number of tests must match scalar(@responses).
-use Test::More tests => 2;
+use Test::More tests => 3;
 
 use POE;
 use POE::Component::Client::HTTP;
@@ -37,6 +38,15 @@ my @responses = (
 		$CRLF .
 		"Content"
 	),
+	# Response is "HTTP::Response"
+	(
+		"HTTP/1.1 200 OK$CRLF" .
+		"Connection: close$CRLF" .
+		"Content-Length: " . length("HTTP::Response") . $CRLF .
+		"Content-type: text/plain$CRLF" .
+		$CRLF .
+		"HTTP::Response"
+	)
 );
 
 # Spawn one server per test response.
