@@ -19,7 +19,7 @@ sub new {
   my $type = shift;
 
   my $self = bless [
-    [],            # FRAMING_BUFFER
+    [],           # FRAMING_BUFFER
     STATE_STATUS, # CURRENT_STATE
     undef,        # WORK_RESPONSE
     "0.9",        # PROTOCOL_VERSION

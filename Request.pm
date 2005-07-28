@@ -140,7 +140,6 @@ sub new {
     undef,              # unused
     0,                  # REQ_OCTETS_GOT
     undef,              # REQ_TIMER
-    #"\x0D\x0A",         # REQ_NEWLINE
     $progress,          # REQ_PROG_POSTBACK
     $using_proxy,       # REQ_USING_PROXY
     $host,              # REQ_HOST
@@ -186,6 +185,37 @@ sub return_response {
     }
   }
   $self->[REQ_BUFFER] = '';
+}
+
+sub add_eof {
+  my ($self) = @_;
+
+  return if ($self->[REQ_STATE] & RS_POSTED);
+
+  unless (defined $self->[REQ_RESPONSE]) {
+    # XXX I don't know if this is actually used
+    $self->error(400, "incomplete response " . $self->[REQ_ID]);
+    return;
+  }
+
+  # RFC 2616: "If a message is received with both a Transfer-Encoding
+  # header field and a Content-Length header field, the latter MUST be
+  # ignored."
+  if (
+    defined $self->[REQ_RESPONSE]->content_length and
+    not defined $self->[REQ_RESPONSE]->header("Transfer-Encoding") and
+    $self->[REQ_OCTETS_GOT] < $self->[REQ_RESPONSE]->content_length
+  ) {
+    DEBUG and warn(
+      "got " . $self->[REQ_OCTETS_GOT] . " of " .
+      $self->[REQ_RESPONSE]->content_length
+    );
+    $self->error(400, "incomplete response " . $self->[REQ_ID]);
+  }
+  else {
+    $self->[REQ_STATE] |= RS_DONE;
+    $self->return_response();
+  }
 }
 
 sub add_content {

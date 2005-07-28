@@ -128,7 +128,7 @@ sub poco_weeble_start {
 sub poco_weeble_stop {
   my $heap = shift;
   my $request = delete $heap->{request};
-	$request->remove_timeout() if $request;
+  $request->remove_timeout() if $request;
   DEBUG and warn "$heap->{alias} stopped.";
 }
 
@@ -239,7 +239,7 @@ sub poco_weeble_connect_done {
 
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
-		$request->remove_timeout();
+    $request->remove_timeout();
 
     # Post an error response back to the requesting session.
     $request->connect_error("$operation error $errnum: $errstr");
@@ -483,7 +483,7 @@ sub poco_weeble_io_read {
 
   # We're in a content state.
   if ($request->[REQ_STATE] & RS_IN_CONTENT) {
-		if (ref($input) and UNIVERSAL::isa($input, 'HTTP::Response')) {
+    if (ref($input) and UNIVERSAL::isa($input, 'HTTP::Response')) {
       # there was a problem in the input filter
       # $request->close_connection;
     }
@@ -554,10 +554,8 @@ sub _finish_request {
     );
   }
 
-  # If we're streaming, the response is HTTP::Response without
-  # content and undef to signal the end of the stream.  Otherwise
-  # it's the entire HTTP::Response object we've carefully built.
-  $request->return_response;
+  # XXX What does this do?
+  $request->add_eof;
 
   # KeepAlive: added the RS_POSTED flag
   $request->[REQ_STATE] |= RS_POSTED;
@@ -580,7 +578,7 @@ sub _finish_request {
   else {
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
-		$request->remove_timeout() if $request;
+    $request->remove_timeout() if $request;
   }
 }
 
@@ -591,9 +589,9 @@ sub poco_weeble_remove_request {
   my ($kernel, $heap, $request_id) = @_[KERNEL, HEAP, ARG0];
 
   my $request = delete $heap->{request}->{$request_id};
-	if (defined $request) {
+  if (defined $request) {
     DEBUG and warn "I/O: removed request $request_id";
-		$request->remove_timeout();
+    $request->remove_timeout();
   }
 }
 #}}} _remove_request
