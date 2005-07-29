@@ -43,8 +43,8 @@ sub get_one {
     DEBUG and warn "LINE $line";
     if ($self->[CURRENT_STATE] == STATE_STATUS) {
       DEBUG and warn "in status";
-      #expect a status line
-      if ($line =~ m|^(?:HTTP/(\d+\.\d+) )?(\d{3})(?: (.+))?$|) {
+      # Expect a status line.
+      if ($line =~ m|^(?:HTTP/(\d+\.\d+) )?(\d{3})\s*(.+)?$|) {
         $self->[PROTOCOL_VERSION] = $1 if defined $1;
         $self->[WORK_RESPONSE] = HTTP::Response->new ($2, $3);
         $self->[CURRENT_STATE] = STATE_HEADER;

@@ -14,7 +14,7 @@ use HTTP::Request::Common 'GET';
 sub DEBUG () { 0 }
 
 # The number of tests must match scalar(@responses).
-use Test::More tests => 3;
+use Test::More tests => 4;
 
 use POE;
 use POE::Component::Client::HTTP;
@@ -48,7 +48,16 @@ my @responses = (
     "Content-type: text/plain$CRLF" .
     $CRLF .
     "HTTP::Response"
-  )
+  ),
+  # The status line here causes PoCo::Client::HTTP to crash.  There's
+  # the space after the status code but no "OK".
+  (
+    "HTTP/1.1 200 " . $CRLF .
+    "Content-type: text/plain" . $CRLF .
+    "Connection: close" . $CRLF .
+    $CRLF .
+    "Content"
+  ),
 );
 
 # Spawn one server per test response.
