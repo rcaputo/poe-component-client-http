@@ -288,20 +288,19 @@ sub create_request {
   # request URI.
 
   my $proxy = $self->[FCT_PROXY];
-  my $using_proxy;
   if (defined $proxy) {
   # This request qualifies for proxying.  Replace the host and port
   # with the proxy's host and port.  This comes after the Host:
   # header is set, so it doesn't break the request object.
     my $host = $http_request->uri->host;
-    if (not _in_no_proxy ($host, $self->[FCT_NOPROXY])) {
-      my $using_proxy = $proxy->[@$proxy];
-    }
+
+    undef $proxy
+      if _in_no_proxy ($host, $self->[FCT_NOPROXY]);
   }
 
   my $request = POE::Component::Client::HTTP::Request->new (
     Request => $http_request,
-    Proxy => $using_proxy,
+    Proxy => $proxy,
     Postback => $postback,
     Tag => $tag,
     Progress => $progress_postback,

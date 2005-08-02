@@ -164,13 +164,13 @@ sub poco_weeble_request {
     );
   }
 
-  
+
   eval {
       # get a connection from Client::Keepalive
       $heap->{cm}->allocate(
-        scheme  => $http_request->uri->scheme,
-        addr    => $http_request->uri->host,
-        port    => $http_request->uri->port,
+        scheme  => $request->scheme,
+        addr    => $request->host,
+        port    => $request->port,
         context => $request->ID,
         event   => 'got_connect_done',
         @timeout,

@@ -121,7 +121,8 @@ sub new {
     # This request qualifies for proxying.  Replace the host and port
     # with the proxy's host and port.  This comes after the Host:
     # header is set, so it doesn't break the request object.
-    ($host, $port) = $params{Proxy}->[rand @{$params{Proxy}}];
+    ($host, $port) = @{$params{Proxy}->[rand @{$params{Proxy}}]};
+
     $using_proxy = 1;
   }
   else {
@@ -514,6 +515,16 @@ sub connect_error {
   $message = "Cannon connect to $host:$port ($message)";
   $self->error (RC_INTERNAL_SERVER_ERROR, $message);
   return;
+}
+
+sub host { shift->[REQ_HOST] }
+
+sub port { shift->[REQ_PORT] }
+
+sub scheme {
+  my $self = shift;
+
+  $self->[REQ_USING_PROXY] ? 'http' : $self->[REQ_REQUEST]->uri->scheme;
 }
 
 sub DESTROY {
