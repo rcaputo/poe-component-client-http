@@ -7,8 +7,8 @@ package POE::Component::Client::HTTP;
 use strict;
 #use bytes; # for utf8 compatibility
 
-sub DEBUG         () { 0 }
-sub DEBUG_DATA    () { 0 }
+sub DEBUG      () { 0 }
+sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
 $VERSION = '0.7002';
@@ -461,12 +461,19 @@ sub poco_weeble_io_read {
       if (defined $te) {
         $filter = POE::Filter::Stackable->new;
         my @te = split(/\s*,\s*/, lc($te));
-        while (my $encoding = pop @te) {
+
+        while (@te and exists $te_filters{$te[-1]}) {
+          my $encoding = pop @te;
           my $fclass = $te_filters{$encoding};
-          last unless (defined $fclass);
-          $filter->push ($fclass->new);
+          $filter->push($fclass->new);
         }
-        $input->header('Transfer-Encoding', join(', ', @te));
+
+        if (@te) {
+          $input->header('Transfer-Encoding', join(', ', @te));
+        }
+        else {
+          $input->header('Transfer-Encoding', undef);
+        }
       }
       else {
         $filter = POE::Filter::Stream->new;
