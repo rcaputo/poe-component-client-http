@@ -125,22 +125,8 @@ sub new {
 
   # Translate environment variable formats into internal versions.
 
-  if (defined $proxy) {
-    if (ref($proxy) eq 'ARRAY') {
-      croak "Proxy must contain [HOST,PORT]" unless @$proxy == 2;
-      $proxy = [ $proxy ];
-    }
-    else {
-      my @proxies = split /\s*\,\s*/, $proxy;
-      foreach (@proxies) {
-        s/^http:\/+//;
-        s/\/+$//;
-        croak "Proxy must contain host:port" unless /^(.+):(\d+)$/;
-        $_ = [ $1, $2 ];
-      }
-      $proxy = \@proxies;
-    }
-  }
+  $class->parse_proxy($proxy)
+    if (defined $proxy);
 
   if (defined $no_proxy) {
     unless (ref($no_proxy) eq 'ARRAY') {
@@ -235,8 +221,8 @@ Creates a new L<POE::Component::Client::HTTP::Request>
 =cut
 
 sub create_request {
-  my ($self, $http_request, $response_event, $tag, $progress_event, $sender) =
-    @_;
+  my ($self, $http_request, $response_event, $tag,
+      $progress_event, $proxy_override, $sender) =  @_;
 
   # Add a protocol if one isn't included.
   $http_request->protocol( $self->[FCT_PROTOCOL] ) unless (
@@ -287,7 +273,8 @@ sub create_request {
   # not in our no_proxy, then use the proxy.  Otherwise use the
   # request URI.
 
-  my $proxy = $self->[FCT_PROXY];
+  my $proxy = $proxy_override || $self->[FCT_PROXY];
+
   if (defined $proxy) {
   # This request qualifies for proxying.  Replace the host and port
   # with the proxy's host and port.  This comes after the Host:
@@ -386,4 +373,45 @@ sub max_redirect_count {
   }
   return $self->[FCT_FOLLOWREDIRECTS];
 }
+
+=head2 parse_proxy $proxy
+
+This static method is used for parsing proxies. The $proxy can be
+array reference like [host, port] or comma separated string like
+"http://1.2.3.4:80/,http://2.3.4.5:80/".
+
+parse_proxy() returns an array reference of two-element tuples (also
+array ferences), each containing a host and a port:
+
+  [ [ host1, port1 ],
+    [ host2, port2 ],
+    ...
+  ]
+
+=cut
+
+sub parse_proxy {
+  my $proxy = $_[1];
+
+  if (ref($proxy) eq 'ARRAY') {
+    croak "Proxy must contain [HOST,PORT]" unless @$proxy == 2;
+    $proxy = [ $proxy ];
+  } else {
+    my @proxies = split /\s*\,\s*/, $proxy;
+    foreach (@proxies) {
+      s/^http:\/+//;
+      s/\/+$//;
+      croak "Proxy must contain host:port" unless /^(.+):(\d+)$/;
+      $_ = [ $1, $2 ];
+    }
+    if (@proxies) {
+      $proxy = \@proxies;
+    } else {
+      undef $proxy; # Empty proxy list means not to use proxy
+    }
+  }
+
+  $_[1] = $proxy;
+}
+
 1;

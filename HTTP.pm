@@ -148,12 +148,17 @@ sub poco_weeble_pending_requests_count {
 sub poco_weeble_request {
   my (
     $kernel, $heap, $sender,
-    $response_event, $http_request, $tag, $progress_event
-  ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1, ARG2, ARG3];
+    $response_event, $http_request, $tag, $progress_event,
+    $proxy_override
+  ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1, ARG2, ARG3, ARG4];
 
+  if (defined $proxy_override) {
+    POE::Component::Client::HTTP::RequestFactory->parse_proxy($proxy_override);
+  }
 
   my $request = $heap->{factory}->create_request(
-    $http_request, $response_event, $tag, $progress_event, $sender
+    $http_request, $response_event, $tag, $progress_event,
+    $proxy_override, $sender
   );
   $heap->{request}->{$request->ID} = $request;
 
@@ -833,13 +838,16 @@ an HTTP::Request object which defines the request.  For example:
     GET 'http://poe.perl.org', # a simple HTTP request
     'unique id',               # a tag to identify the request
     'progress',                # an event to indicate progress
+    'http://1.2.3.4:80/'       # proxy to use for this request
   );
 
 Requests include the state to which responses will be posted.  In the
 previous example, the handler for a 'response' state will be called
 with each HTTP response.  The "progress" handler is optional and if
 installed, the component will provide progress metrics (see sample
-handler below).
+handler below).  The "proxy" parameter is optional and if not defined,
+a default proxy will be used if configured.  No proxy will be used if
+neither a default one nor a "proxy" parameter is defined.
 
 =head2 pending_requests_count
 
