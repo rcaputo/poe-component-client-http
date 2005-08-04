@@ -427,7 +427,9 @@ sub poco_weeble_io_read {
       #warn "NO INPUT";
     }
 
-    # FIXME: LordVorp gets here without $input being a HTTP::Response
+    # FIXME: LordVorp gets here without $input being a HTTP::Response.
+    # FIXME: This happens when the response is HTTP/0.9 and doesn't
+    # include a status line.  See t/53_response_parser.t.
     $request->[REQ_RESPONSE] = $input;
 
     # Some responses are without content by definition
@@ -461,16 +463,20 @@ sub poco_weeble_io_read {
         return
       }
 
-      my $filter;
+      # RFC 2616 14.41:  If multiple encodings have been applied to an
+      # entity, the transfer-codings MUST be listed in the order in
+      # which they were applied.
+
+      my ($filter, @filters);
+
       my $te = $input->header('Transfer-Encoding');
       if (defined $te) {
-        $filter = POE::Filter::Stackable->new;
         my @te = split(/\s*,\s*/, lc($te));
 
         while (@te and exists $te_filters{$te[-1]}) {
           my $encoding = pop @te;
           my $fclass = $te_filters{$encoding};
-          $filter->push($fclass->new);
+          push @filters, $fclass->new();
         }
 
         if (@te) {
@@ -480,11 +486,19 @@ sub poco_weeble_io_read {
           $input->header('Transfer-Encoding', undef);
         }
       }
+
+      if (@filters > 1) {
+        $filter = POE::Filter::Stackable->new( Filters => \@filters );
+      }
+      elsif (@filters) {
+        $filter = $filters[0];
+      }
       else {
         $filter = POE::Filter::Stream->new;
       }
+
       # do this last, because it triggers a read
-      $request->wheel->set_input_filter ($filter);
+      $request->wheel->set_input_filter($filter);
     }
     return;
   }
