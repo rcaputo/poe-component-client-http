@@ -111,10 +111,13 @@ POE::Session->create(
       }
     },
     response => sub {
-      my $response = $_[ARG1][0]->content();
-      $response =~ s/\x0D/{CR}/g;
-      $response =~ s/\x0A/{LF}/g;
-      pass "got a response, content = ($response)";
+      my $response = $_[ARG1][0];
+      my $content = $response->content();
+
+      $content =~ s/\x0D/{CR}/g;
+      $content =~ s/\x0A/{LF}/g;
+
+      pass "got a response, content = ($content)";
     },
     _stop => sub { exit },  # Nasty but expedient.
   }
