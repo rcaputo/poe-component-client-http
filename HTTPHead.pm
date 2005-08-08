@@ -47,11 +47,15 @@ sub get_one {
       if ($line =~ m|^(?:HTTP/(\d+\.\d+) )?(\d{3})\s*(.+)?$|) {
         $self->[PROTOCOL_VERSION] = $1 if defined $1;
         $self->[WORK_RESPONSE] = HTTP::Response->new ($2, $3);
+        $self->[WORK_RESPONSE]->protocol('HTTP/' . $self->[PROTOCOL_VERSION]);
         $self->[CURRENT_STATE] = STATE_HEADER;
       }
       else {
-        return [undef];
-        #return [HTTP::Response->new ('500', 'Bad Response')];
+        # assume HTTP/0.9
+        my $resp = HTTP::Response->new ('200', 'OK', 
+                    ['Content-Type' => 'text/html'], $line );
+        $resp->protocol('HTTP/0.9');
+        return [ $resp ];
       }
     }
     else {

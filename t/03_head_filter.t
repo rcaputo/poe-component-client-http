@@ -62,7 +62,10 @@ sub input {
 
   $request_number == 7 and isa_ok($data, 'HTTP::Response', "Ok sans headers");
   $request_number == 6 and isa_ok($data, 'HTTP::Response', "Got our object");
-  $request_number == 5 and ok(!defined($data), "Got a bad request");
+  $request_number == 5 and ok(
+    defined($data) && $data->protocol() eq "HTTP/0.9",
+    "Parsed HTTP/0.9 content-only request"
+  );
   $request_number == 4 and ok(
     !defined($data->header('Connection')),
     "Not picking up bad request headers"

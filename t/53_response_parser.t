@@ -9,13 +9,13 @@ use warnings;
 use strict;
 
 use IO::Socket::INET;
-use Socket '$CRLF';
+use Socket '$CRLF', '$LF';
 use HTTP::Request::Common 'GET';
 
 sub DEBUG () { 0 }
 
 # The number of tests must match scalar(@tests).
-use Test::More tests => 3;
+use Test::More tests => 4;
 
 use POE;
 use POE::Component::Client::HTTP;
@@ -50,7 +50,7 @@ my @tests = (
       );
     },
   ],
-  # An HTTP/0.9 response.
+  # An HTTP/0.9 response without LF.
   [
     (
       "<html><head><title>Test</title></head>" .
@@ -61,9 +61,30 @@ my @tests = (
       my $response = shift;
       ok(
         $response->code() == 200 &&
-        $response->content() =~ /Allows documents/,
-        "HTTP 0.9 supports no status and no headers"
+        $response->content() =~ /Allows documents/ &&
+        $response->protocol() eq 'HTTP/0.9' &&
+        $response->header('Content-Type') =~ /html/,
+        "HTTP 0.9 supports no status and no headers, no LF"
       );
+    },
+  ],
+  # A multi-line HTTP/0.9 response.
+  [
+    (
+      "<html><head><title>Test</title></head>" . $LF .
+      "<body>HTTP/0.9 Allows documents with no status and no headers!" . $LF .
+      "</body></html>" . $LF
+    ),
+    sub {
+      my $response = shift;
+      ok(
+        $response->code() == 200 &&
+        $response->content() =~ /Allows documents/ &&
+        $response->protocol() eq 'HTTP/0.9' &&
+        $response->header('Content-Type') =~ /html/ &&
+        $response->content() =~ m!</html>!,
+        "HTTP 0.9 supports no status and no headers, multiple lines"
+      )
     },
   ],
   # A response with no known transfer encoding.

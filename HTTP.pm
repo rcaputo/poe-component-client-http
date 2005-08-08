@@ -378,7 +378,23 @@ sub poco_weeble_io_error {
       DEBUG and warn "I/O: Disconnect, remote keepalive timeout or HTTP/1.0.";
       return;
     }
-
+    elsif (not defined $request->[REQ_RESPONSE]) {
+      # never got a response, check for pending data indicating
+      # a LF-free HTTP 0.9 response
+      my $lines = $request->wheel->get_input_filter()->get_pending();
+      my $text = join '' => @$lines;
+      DEBUG and warn "Got ", length($text), " bytes of data without LF.";
+      if ($text =~ /\S/) {
+        # generate response
+        DEBUG and warn "Generating HTTP response for HTTP/0.9 response without LF.";
+        $request->[REQ_RESPONSE] = HTTP::Response->new(200, 'OK', 
+            [ 'Content-Type' => 'text/html' ], $text);
+        $request->[REQ_RESPONSE]->protocol('HTTP/0.9');
+        $request->[REQ_STATE] = RS_DONE;
+        $request->return_response;
+        return;
+      }
+    }
     # We haven't built a proper response.  Send back an error.
     $request->error (400, "incomplete response $request_id");
   }
