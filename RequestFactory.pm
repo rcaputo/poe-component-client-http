@@ -115,7 +115,7 @@ sub new {
   my $from             = delete $params->{From};
   my $no_proxy         = delete $params->{NoProxy};
   my $proxy            = delete $params->{Proxy};
-  my $follow_redirects = delete $params->{FollowRedirects};
+  my $follow_redirects = delete $params->{FollowRedirects} || 0;
   my $timeout          = delete $params->{Timeout};
 
   # Process HTTP_PROXY and NO_PROXY environment variables.
