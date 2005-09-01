@@ -469,12 +469,21 @@ sub poco_weeble_io_read {
         #       request is in, and only then do the new request, so we
         #       can reuse the connection.
         DEBUG and warn "Redirected $request_id ", $input->code;
+	my @proxy;
+	if ($request->[REQ_USING_PROXY]) {
+	  push @proxy, ('http://' .
+			$request->host .
+			':' .
+			$request->port .
+			'/');
+	}
         $kernel->yield (
           request =>
           $request,
           $newrequest,
           "_redir_".$request->ID,
-          $request->[REQ_PROG_POSTBACK]
+          $request->[REQ_PROG_POSTBACK],
+          @proxy
         );
         return
       }
