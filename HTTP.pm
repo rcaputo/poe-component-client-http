@@ -258,7 +258,7 @@ sub poco_weeble_connect_done {
 sub poco_weeble_timeout {
   my ($kernel, $heap, $request_id) = @_[KERNEL, HEAP, ARG0];
 
-  DEBUG and warn "TKO: request $request_id timed out";
+  DEBUG and warn "T/O: request $request_id timed out";
 
   # Discard the request.  Keep a copy for a few bits of cleanup.
   DEBUG and warn "I/O: removing request $request_id";
@@ -266,42 +266,45 @@ sub poco_weeble_timeout {
 
   unless (defined $request) {
     die(
-      "TKO: unexpectedly undefined request for id $request_id\n",
-      "TKO: known request IDs: ", join(", ", keys %{$heap->{request}}), "\n",
+      "T/O: unexpectedly undefined request for id $request_id\n",
+      "T/O: known request IDs: ", join(", ", keys %{$heap->{request}}), "\n",
       "...",
     );
   }
 
-  DEBUG and warn "TKO: request $request_id has timer ", $request->timer;
+  DEBUG and warn "T/O: request $request_id has timer ", $request->timer;
   $request->remove_timeout();
 
   # There's a wheel attached to the request.  Shut it down.
   if (defined $request->wheel) {
     my $wheel_id = $request->wheel->ID();
-    DEBUG and warn "TKO: request $request_id is wheel $wheel_id";
+    DEBUG and warn "T/O: request $request_id is wheel $wheel_id";
     delete $heap->{wheel_to_request}->{$wheel_id};
   }
 
   DEBUG and do {
-    die( "TKO: request $request_id is unexpectedly zero" )
+    die( "T/O: request $request_id is unexpectedly zero" )
       unless $request->[REQ_STATE];
-    warn "TKO: request_state = " . sprintf("%#04x\n", $request->[REQ_STATE]);
+    warn "T/O: request_state = " . sprintf("%#04x\n", $request->[REQ_STATE]);
   };
 
-  if (
-    $request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and
-    not $request->[REQ_STATE] & RS_POSTED
-  ) {
-    #warn "request_id is $request_id, while request's id is $request->[REQ_ID]";
-    _finish_request($heap, $request, 0);
-    return;
-  }
-  elsif ($request->[REQ_STATE] & RS_POSTED) {
+  # Hey, we haven't sent back a response yet!
+  if (not $request->[REQ_STATE] & RS_POSTED) {
+
+    # Well, we have a response.  Isn't that nice?  Let's send it.
+    if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE)) {
+      _finish_request($heap, $request, 0);
+      return;
+    }
+
+    # Shut down the connection so it's not reused.
+    $request->[REQ_CONNECTION]->wheel()->shutdown_input();
+
+    # Post an error response back to the requesting session.
     DEBUG and warn "I/O: Disconnect, keepalive timeout or HTTP/1.0.";
     $request->error(408, "Request timed out") if $request->[REQ_STATE];
     return;
   }
-  # Post an error response back to the requesting session.
 }
 
 # }}} poco_weeble_timeout
@@ -386,9 +389,12 @@ sub poco_weeble_io_error {
       DEBUG and warn "Got ", length($text), " bytes of data without LF.";
       if ($text =~ /\S/) {
         # generate response
-        DEBUG and warn "Generating HTTP response for HTTP/0.9 response without LF.";
-        $request->[REQ_RESPONSE] = HTTP::Response->new(200, 'OK', 
-            [ 'Content-Type' => 'text/html' ], $text);
+        DEBUG and warn(
+          "Generating HTTP response for HTTP/0.9 response without LF."
+        );
+        $request->[REQ_RESPONSE] = HTTP::Response->new(
+          200, 'OK', [ 'Content-Type' => 'text/html' ], $text
+        );
         $request->[REQ_RESPONSE]->protocol('HTTP/0.9');
         $request->[REQ_STATE] = RS_DONE;
         $request->return_response;
@@ -469,14 +475,12 @@ sub poco_weeble_io_read {
         #       request is in, and only then do the new request, so we
         #       can reuse the connection.
         DEBUG and warn "Redirected $request_id ", $input->code;
-	my @proxy;
-	if ($request->[REQ_USING_PROXY]) {
-	  push @proxy, ('http://' .
-			$request->host .
-			':' .
-			$request->port .
-			'/');
-	}
+        my @proxy;
+        if ($request->[REQ_USING_PROXY]) {
+          push @proxy, (
+            'http://' .  $request->host .  ':' .  $request->port .  '/'
+          );
+        }
         $kernel->yield (
           request =>
           $request,
