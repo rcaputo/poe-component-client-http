@@ -244,6 +244,16 @@ sub create_request {
     }
   }
 
+  # Add a Content-Length header if this request has content but
+  # doesn't have a Content-Length header already.
+  if (
+    length($http_request->content()) and
+    !$http_request->content_length()
+  ) {
+    use bytes;
+    $http_request->content_length(length($http_request->content()));
+  }
+
   my ($last_request, $postback);
   if (ref($response_event)) {
     $last_request = $response_event;
