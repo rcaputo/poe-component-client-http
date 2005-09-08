@@ -169,7 +169,6 @@ sub poco_weeble_request {
     );
   }
 
-
   eval {
       # get a connection from Client::Keepalive
       $heap->{cm}->allocate(

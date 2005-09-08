@@ -8,7 +8,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 8;
+use Test::More tests => 9;
 
 $SIG{PIPE} = 'IGNORE';
 
@@ -33,13 +33,14 @@ POE::Session->create(
       spawn_http('proxy1');
       spawn_http('proxy2');
       spawn_http('host');
+      spawn_rproxy();
     },
     set_port => sub {
       my ($kernel, $heap, $name, $port) = @_[KERNEL, HEAP, ARG0, ARG1];
 
       $heap->{$name} = "http://127.0.0.1:$port/";
 
-      if (++ $_[HEAP]->{ready_cnt} == 3) {
+      if (++ $_[HEAP]->{ready_cnt} == 4) {
         $_[KERNEL]->yield('begin_tests');
       }
     },
@@ -47,7 +48,7 @@ POE::Session->create(
       my ($kernel, $heap) = @_[KERNEL, HEAP];
 
       POE::Component::Client::HTTP->spawn(Alias => 'DefProxy', Proxy => $heap->{proxy1});
-      POE::Component::Client::HTTP->spawn(Alias => 'NoProxy');
+      POE::Component::Client::HTTP->spawn(Alias => 'NoProxy', FollowRedirects => 3);
 
       # Test is default proxy working
       $kernel->post(DefProxy => request => test1_resp => GET $heap->{host});
@@ -153,8 +154,18 @@ POE::Session->create(
         fail();
       }
 
+      $kernel->post(NoProxy => request => test9_resp => (GET 'http://redirect.me/'),
+		    undef, undef, $heap->{rproxy});
+    },
+    test9_resp => sub {
+      my ($kernel, $heap, $resp_pack) = @_[KERNEL, HEAP, ARG1];
+      my $resp = $resp_pack->[0];
+
+      ok($resp->is_success && $resp->content eq 'rproxy');
+
       $kernel->post(proxy1 => 'shutdown');
       $kernel->post(proxy2 => 'shutdown');
+      $kernel->post(rproxy => 'shutdown');
       $kernel->post(host => 'shutdown');
     }
   },
@@ -185,6 +196,23 @@ sub spawn_http {
   );
 }
 
+sub spawn_rproxy  {
+  POE::Component::Server::TCP->new(
+    Alias        => 'rproxy',
+    Address      => '127.0.0.1',
+    Port         => 0,
+    ClientFilter => 'POE::Filter::HTTPD',
+
+    ClientInput => \&handle_rproxy_request,
+    Started => sub {
+      my ($kernel, $heap) = @_[KERNEL, HEAP];
+      my $port = (sockaddr_in($heap->{listener}->getsockname))[0];
+
+      $kernel->post('main', 'set_port', 'rproxy', $port);
+    }
+  );
+}
+
 sub handle_request {
   my $name = shift;
   my ($kernel, $heap, $request) = @_[KERNEL, HEAP, ARG0];
@@ -195,13 +223,13 @@ sub handle_request {
     return;
   }
 
-  my ($body, $port);
+  my ($body, $host);
   if (
     (
       (
         $name =~ /^proxy/ &&
-        defined($port = $kernel->alias_resolve('main')->get_heap->{http}) &&
-        $request->uri->canonical ne "http://127.0.0.1:$port/"
+       defined($host = $kernel->alias_resolve('main')->get_heap->{host}) &&
+        $request->uri->canonical ne $host
       )
       ||
       (
@@ -229,5 +257,38 @@ sub handle_request {
 
   $heap->{client}->put($r) if defined $heap->{client};
 
+  $kernel->yield("shutdown");
+}
+
+sub handle_rproxy_request {
+  my ($kernel, $heap, $request) = @_[KERNEL, HEAP, ARG0];
+
+  if ($request->isa("HTTP::Response")) {
+    $heap->{client}->put($request);
+    $kernel->yield("shutdown");
+    return;
+  }
+
+  my $host = $kernel->alias_resolve('main')->get_heap->{host};
+  my $r;
+
+  if ($request->uri->canonical eq 'http://redirect.me/') {
+    $r = HTTP::Response->new
+      (302,
+       'Moved',
+       ['Connection' => 'Close',
+	'Content-Type' => 'text/plain',
+	'Location' => $host
+       ]);
+  } else {
+    $r = HTTP::Response->new
+      (
+       200,
+       'OK',
+       ['Connection' => 'Close', 'Content-Type' => 'text/plain'],
+       $request->uri->canonical eq $host ? 'rproxy' : 'fail'
+      );
+  }
+  $heap->{client}->put($r) if defined $heap->{client};
   $kernel->yield("shutdown");
 }
