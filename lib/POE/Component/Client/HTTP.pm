@@ -365,9 +365,9 @@ sub poco_weeble_io_error {
     # If there was a non-zero error, then something bad happened.  Post
     # an error response back, if we haven't posted anything before.
     if ($errnum) {
-			unless ($request->[REQ_STATE] & RS_POSTED) {
-				$request->error(400, "$operation error $errnum: $errstr");
-			}
+      unless ($request->[REQ_STATE] & RS_POSTED) {
+        $request->error(400, "$operation error $errnum: $errstr");
+      }
       return;
     }
 
