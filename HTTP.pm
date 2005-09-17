@@ -355,19 +355,21 @@ sub poco_weeble_io_error {
     my $request = delete $heap->{request}->{$request_id};
     $request->remove_timeout;
 
-    # If there was a non-zero error, then something bad happened.  Post
-    # an error response back.
-    if ($errnum) {
-      $request->error(400, "$operation error $errnum: $errstr");
-      return;
-    }
-
     # Otherwise the remote end simply closed.  If we've got a
     # pending response, then post it back to the client.
     DEBUG and warn "STATE is ", $request->[REQ_STATE];
 
     # except when we're redirected
     return if ($request->[REQ_STATE] == RS_REDIRECTED);
+
+    # If there was a non-zero error, then something bad happened.  Post
+    # an error response back, if we haven't posted anything before.
+    if ($errnum) {
+			unless ($request->[REQ_STATE] & RS_POSTED) {
+				$request->error(400, "$operation error $errnum: $errstr");
+			}
+      return;
+    }
 
     if (
       $request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and
