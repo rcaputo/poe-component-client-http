@@ -204,7 +204,7 @@ $cm = POE::Component::Client::Keepalive->new;
 # Create a weeble component.
 POE::Component::Client::HTTP->spawn(
   #MaxSize           => MAX_BIG_REQUEST_SIZE,
-  Timeout           => 2,
+  Timeout           => 60,
   ConnectionManager => $cm,
 );
 
@@ -212,7 +212,7 @@ POE::Component::Client::HTTP->spawn(
 POE::Component::Client::HTTP->spawn(
   Alias             => 'chunk',
   MaxSize           => MAX_BIG_REQUEST_SIZE,
-  Timeout           => 5,
+  Timeout           => 60,
   FollowRedirects   => 1,
   Protocol          => 'HTTP/1.1',
   ConnectionManager => $cm,

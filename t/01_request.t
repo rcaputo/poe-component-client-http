@@ -291,7 +291,7 @@ sub client_got_stream_response {
 # Create a weeble component.
 POE::Component::Client::HTTP->spawn(
   MaxSize           => MAX_BIG_REQUEST_SIZE,
-  Timeout           => 5,
+  Timeout           => 60,
   Protocol          => 'HTTP/1.1',
   ConnectionManager => $cm1,
 );
