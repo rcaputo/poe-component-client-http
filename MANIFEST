@@ -1,14 +1,14 @@
 # $Id$
 CHANGES
 CHANGES.OLD
-HTTP.pm
-HTTPChunk.pm
-HTTPHead.pm
 MANIFEST
 Makefile.PL
 README
-Request.pm
-RequestFactory.pm
+lib/POE/Component/Client/HTTP.pm
+lib/POE/Component/Client/HTTP/Request.pm
+lib/POE/Component/Client/HTTP/RequestFactory.pm
+lib/POE/Filter/HTTPChunk.pm
+lib/POE/Filter/HTTPHead.pm
 t/01_request.t
 t/02_keepalive.t
 t/03_head_filter.t

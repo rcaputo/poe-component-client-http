@@ -91,20 +91,20 @@ sub get_one {
   return [];
 }
 
-=for future
-
-sub put {
-  my ($self, $responses) = @_;
-  my $out;
-
-  foreach my $response (@$responses) {
-    $out = $response->as_string
-  }
-
-  $out;
-}
-
-=cut
+#=for future
+#
+#sub put {
+#  my ($self, $responses) = @_;
+#  my $out;
+#
+#  foreach my $response (@$responses) {
+#    $out = $response->as_string
+#  }
+#
+#  $out;
+#}
+#
+#=cut
 
 sub get_pending {
   my $self = shift;
@@ -169,13 +169,13 @@ sub get_pending {
   return \@pending;
 }
 
-=for future?
-
-sub put {
-  my $self = shift;
-  return $self->[0]->[1]->put (@_);
-}
-
-=cut
+#=for future?
+#
+#sub put {
+#  my $self = shift;
+#  return $self->[0]->[1]->put (@_);
+#}
+#
+#=cut
 
 1;
