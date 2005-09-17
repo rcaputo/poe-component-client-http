@@ -91,7 +91,9 @@ sub get_one {
 
     if ($self->[CURRENT_STATE] & STATE_SIZE) {
       DEBUG and warn "Finding chunk length marker";
-      if ($chunk =~ s/^($HEX+)(?:;.*?)?[^\S\015\012]*\015?\012//s) {
+      if (
+				$chunk =~ s/^($HEX+)[^\S\015\012]*(?:;.*?)?[^\S\015\012]*\015?\012//s
+			) {
         my $length = hex($1);
         DEBUG and warn "Chunk should be $length bytes";
         $self->[CHUNK_SIZE] = $length;
