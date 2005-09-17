@@ -288,7 +288,7 @@ sub poco_weeble_timeout {
   };
 
   # Hey, we haven't sent back a response yet!
-  if (not $request->[REQ_STATE] & RS_POSTED) {
+	unless ($request->[REQ_STATE] & (RS_REDIRECTED | RS_POSTED)) {
 
     # Well, we have a response.  Isn't that nice?  Let's send it.
     if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE)) {
@@ -360,7 +360,7 @@ sub poco_weeble_io_error {
     DEBUG and warn "STATE is ", $request->[REQ_STATE];
 
     # except when we're redirected
-    return if ($request->[REQ_STATE] == RS_REDIRECTED);
+    return if ($request->[REQ_STATE] & RS_REDIRECTED);
 
     # If there was a non-zero error, then something bad happened.  Post
     # an error response back, if we haven't posted anything before.
@@ -430,7 +430,7 @@ sub poco_weeble_io_read {
   # Reset the timeout if we get data.
   $kernel->delay_adjust($request->timer, $heap->{factory}->timeout);
 
-  if ($request->[REQ_STATE] == RS_REDIRECTED) {
+  if ($request->[REQ_STATE] & RS_REDIRECTED) {
     DEBUG and warn "input for request that was redirected";
     return;
   }
