@@ -418,7 +418,7 @@ sub check_redirect {
     last if ($history > $max);
   }
 
-  if ($history > $max) {
+  if ($history >= $max) {
     #$self->[REQ_STATE] |= RS_DONE;
     DEBUG and warn "RED: Too much redirection";
   }
