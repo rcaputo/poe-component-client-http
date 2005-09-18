@@ -275,9 +275,12 @@ sub poco_weeble_timeout {
   $request->remove_timeout();
 
   # There's a wheel attached to the request.  Shut it down.
-  if (defined $request->wheel) {
-    my $wheel_id = $request->wheel->ID();
+  if (defined(my $wheel = $request->wheel())) {
+    my $wheel_id = $wheel->ID();
     DEBUG and warn "T/O: request $request_id is wheel $wheel_id";
+
+    # Shut down the connection so it's not reused.
+    $wheel->shutdown_input();
     delete $heap->{wheel_to_request}->{$wheel_id};
   }
 
@@ -288,16 +291,13 @@ sub poco_weeble_timeout {
   };
 
   # Hey, we haven't sent back a response yet!
-	unless ($request->[REQ_STATE] & (RS_REDIRECTED | RS_POSTED)) {
+  unless ($request->[REQ_STATE] & (RS_REDIRECTED | RS_POSTED)) {
 
     # Well, we have a response.  Isn't that nice?  Let's send it.
     if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE)) {
       _finish_request($heap, $request, 0);
       return;
     }
-
-    # Shut down the connection so it's not reused.
-    $request->[REQ_CONNECTION]->wheel()->shutdown_input();
 
     # Post an error response back to the requesting session.
     DEBUG and warn "I/O: Disconnect, keepalive timeout or HTTP/1.0.";
