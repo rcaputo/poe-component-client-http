@@ -125,8 +125,7 @@ sub new {
 
   # Translate environment variable formats into internal versions.
 
-  $class->parse_proxy($proxy)
-    if (defined $proxy);
+  $class->parse_proxy($proxy) if defined $proxy;
 
   if (defined $no_proxy) {
     unless (ref($no_proxy) eq 'ARRAY') {
@@ -291,8 +290,10 @@ sub create_request {
   # header is set, so it doesn't break the request object.
     my $host = $http_request->uri->host;
 
-    undef $proxy
-      if _in_no_proxy ($host, $self->[FCT_NOPROXY]);
+    undef $proxy if (
+			!defined($host) or
+      _in_no_proxy ($host, $self->[FCT_NOPROXY])
+		);
   }
 
   my $request = POE::Component::Client::HTTP::Request->new (
@@ -315,6 +316,7 @@ sub create_request {
 
 sub _in_no_proxy {
   my ($host, $no_proxy) = @_;
+
   foreach my $no_proxy_domain (@$no_proxy) {
     return 1 if $host =~ /\Q$no_proxy_domain\E$/i;
   }
