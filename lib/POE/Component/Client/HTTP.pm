@@ -468,6 +468,9 @@ sub poco_weeble_io_read {
       )
     ) {
       $request->[REQ_STATE] |= RS_DONE;
+      $request->remove_timeout();
+      _finish_request($heap, $request, 1);
+      return;
     }
     else {
       $request->[REQ_STATE] = RS_IN_CONTENT;
