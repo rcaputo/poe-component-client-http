@@ -44,6 +44,11 @@ my %te_filters = (
   chunked => 'POE::Filter::HTTPChunk',
 );
 
+my %supported_schemes = (
+  http => 1,
+  https => 1
+);
+
 # }}} INIT
 
 #------------------------------------------------------------------------------
@@ -151,6 +156,21 @@ sub poco_weeble_request {
     $response_event, $http_request, $tag, $progress_event,
     $proxy_override
   ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1, ARG2, ARG3, ARG4];
+
+  unless ($supported_schemes{$http_request->uri->scheme}) {
+    my $rsp = HTTP::Response->new(
+       400 => 'Bad Request', [],
+       "<html>\n"
+       . "<HEAD><TITLE>Error: Bad Request</TITLE></HEAD>\n"
+       . "<BODY>\n"
+       . "<H1>Error: Bad Request</H1>\n"
+       . "Unsupported URI scheme\n"
+       . "</BODY>\n"
+       . "</HTML>\n"
+      );
+    $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
+    return;
+  }
 
   if (defined $proxy_override) {
     POE::Component::Client::HTTP::RequestFactory->parse_proxy($proxy_override);
