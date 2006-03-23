@@ -1019,6 +1019,8 @@ Timeout.
 
 There is no support for CGI_PROXY or CgiProxy.
 
+Secure HTTP (https) proxying is not supported at this time.
+
 =head1 AUTHOR & COPYRIGHTS
 
 POE::Component::Client::HTTP is
