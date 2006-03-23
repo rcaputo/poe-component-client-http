@@ -45,8 +45,8 @@ my %te_filters = (
 );
 
 my %supported_schemes = (
-  http => 1,
-  https => 1
+  http  => 1,
+  https => 1,
 );
 
 # }}} INIT
@@ -441,6 +441,7 @@ sub poco_weeble_io_read {
   DEBUG and warn "I/O: wheel $wheel_id got input...";
   DEBUG_DATA and warn (ref($input) ? $input->as_string : _hexdump($input));
 
+	# TODO - So, which is it?  Return, or die?
   return unless defined $request_id;
   die unless defined $request_id;
   my $request = $heap->{request}->{$request_id};
@@ -487,6 +488,7 @@ sub poco_weeble_io_read {
         and $input->content_length() == 0
       )
     ) {
+			return if _try_redirect($request_id, $input, $request);
       $request->[REQ_STATE] |= RS_DONE;
       $request->remove_timeout();
       _finish_request($heap, $request, 1);
@@ -494,27 +496,10 @@ sub poco_weeble_io_read {
     }
     else {
       $request->[REQ_STATE] = RS_IN_CONTENT;
-      if (my $newrequest = $request->check_redirect) {
-        #FIXME: probably want to find out when the content from this
-        #       request is in, and only then do the new request, so we
-        #       can reuse the connection.
-        DEBUG and warn "Redirected $request_id ", $input->code;
-        my @proxy;
-        if ($request->[REQ_USING_PROXY]) {
-          push @proxy, (
-            'http://' .  $request->host .  ':' .  $request->port .  '/'
-          );
-        }
-        $kernel->yield (
-          request =>
-          $request,
-          $newrequest,
-          "_redir_".$request->ID,
-          $request->[REQ_PROG_POSTBACK],
-          @proxy
-        );
-        return
-      }
+			#FIXME: probably want to find out when the content from this
+			#       request is in, and only then do the new request, so we
+			#       can reuse the connection.
+			return if _try_redirect($request_id, $input, $request);
 
       # RFC 2616 14.41:  If multiple encodings have been applied to an
       # entity, the transfer-codings MUST be listed in the order in
@@ -616,6 +601,35 @@ sub _hexdump {
 }
 
 # }}} _hexdump
+
+# Check for and handle redirect.  Returns true if redirect should
+# occur, or false if there's no redirect.
+
+sub _try_redirect {
+	my ($request_id, $input, $request) = @_;
+
+	if (my $newrequest = $request->check_redirect) {
+		DEBUG and warn "Redirected $request_id ", $input->code;
+		my @proxy;
+		if ($request->[REQ_USING_PROXY]) {
+			push @proxy, (
+				'http://' .  $request->host .  ':' .  $request->port .  '/'
+			);
+		}
+		$poe_kernel->yield (
+			request =>
+			$request,
+			$newrequest,
+			"_redir_".$request->ID,
+			$request->[REQ_PROG_POSTBACK],
+			@proxy
+		);
+
+		return 1;
+	}
+
+	return;
+}
 
 # Complete a request. This was moved out of poco_weeble_io_error(). This is
 # not a POE function.
