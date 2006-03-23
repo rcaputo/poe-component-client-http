@@ -24,6 +24,11 @@ use HTTP::Request::Common qw(GET PUT);
 
 use HTTP::Response;
 
+# We need some control over proxying here.
+BEGIN {
+	delete $ENV{HTTP_PROXY};
+}
+
 POE::Session->create(
    inline_states => {
     _start => sub {
@@ -79,7 +84,6 @@ POE::Session->create(
 
       # Test when no proxy set at all
       $kernel->post(NoProxy => request => test4_resp => GET $heap->{host});
-
     },
     test4_resp => sub {
       my ($kernel, $heap, $resp_pack) = @_[KERNEL, HEAP, ARG1];

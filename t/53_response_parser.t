@@ -110,6 +110,12 @@ my @tests = (
   ],
 );
 
+# We are testing against a localhost server.
+# Don't proxy, because localhost takes on new meaning.
+BEGIN {
+	delete $ENV{HTTP_PROXY};
+}
+
 # Spawn one server per test response.
 {
   foreach (@tests) {

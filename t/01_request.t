@@ -45,7 +45,6 @@ sub client_start {
     GET('http://poe.perl.org/misc/test.html', Connection => 'close'),
   );
 
-
   $kernel->post(
     weeble => request => got_response => (
       POST(
@@ -67,7 +66,6 @@ sub client_start {
       Connection => 'close',
     ),
   );
-
 
   if ($has_sslify) {
     my $secure_request = GET(
@@ -185,7 +183,7 @@ sub client_got_response {
       ok(1, 'request 5') if $request_path eq '';
       ok(1, 'request 4') if $request_path =~ m/projects\/poe/;
     }
-    elsif ($http_response->code == 500) {
+    elsif ($http_response->code == 500 or $http_response->code == 502) {
       pass("request 6");
       # The next test assumes a particular responding server.
       # It's bogus is proxying is enabled through the environment.
@@ -194,6 +192,10 @@ sub client_got_response {
     elsif ($http_response->code == 400) {
       ok("" eq $http_request->uri->host, '400 for malformed request 10');
     }
+		else {
+			warn $http_request->uri();
+			warn $http_response->as_string();
+		}
   }
 }
 

@@ -19,6 +19,12 @@ POE::Component::Client::HTTP->spawn(
  Timeout => 1
 );
 
+# We are testing against a localhost server.
+# Don't proxy, because localhost takes on new meaning.
+BEGIN {
+	delete $ENV{HTTP_PROXY};
+}
+
 POE::Session->create(
    inline_states => {
     _start => sub {
@@ -52,7 +58,7 @@ POE::Session->create(
       my $rsp = $rspp->[0];
 
       $kernel->delay('no_response'); # Clear timer
-      ok($rsp->code == 408, "received error 408");
+      ok($rsp->code == 408, "received error " . $rsp->code . " (wanted 408)");
       $kernel->post(Discard => 'shutdown');
     },
     no_response => sub {
