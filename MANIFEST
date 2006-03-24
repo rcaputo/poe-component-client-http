@@ -22,3 +22,4 @@ t/50_davis_zerolength.t
 t/51_santos_status.t
 t/52_reiss_bad_length.t
 t/53_response_parser.t
+t/54_hzheng_head_redir.t
