@@ -281,13 +281,13 @@ sub create_request {
   # MEXNIX 2002-06-01: If we have a proxy set, and the request URI is
   # not in our no_proxy, then use the proxy.  Otherwise use the
   # request URI.
-	#
-	# RCAPUTO 2006-03-23: We only support http proxying right now.
-	# Avoid proxying if this isn't an http request.
-	my $proxy = $proxy_override;
-	if ($http_request->uri->scheme() eq "http") {
-		$proxy ||= $self->[FCT_HTTP_PROXY];
-	}
+  #
+  # RCAPUTO 2006-03-23: We only support http proxying right now.
+  # Avoid proxying if this isn't an http request.
+  my $proxy = $proxy_override;
+  if ($http_request->uri->scheme() eq "http") {
+    $proxy ||= $self->[FCT_HTTP_PROXY];
+  }
 
   if (defined $proxy) {
   # This request qualifies for proxying.  Replace the host and port
@@ -296,9 +296,9 @@ sub create_request {
     my $host = $http_request->uri->host;
 
     undef $proxy if (
-			!defined($host) or
+      !defined($host) or
       _in_no_proxy ($host, $self->[FCT_NOPROXY])
-		);
+    );
   }
 
   my $request = POE::Component::Client::HTTP::Request->new (

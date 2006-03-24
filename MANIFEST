@@ -4,6 +4,7 @@ CHANGES.OLD
 MANIFEST
 Makefile.PL
 README
+examples/pcchget.perl
 lib/POE/Component/Client/HTTP.pm
 lib/POE/Component/Client/HTTP/Request.pm
 lib/POE/Component/Client/HTTP/RequestFactory.pm

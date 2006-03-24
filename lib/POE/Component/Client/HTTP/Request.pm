@@ -519,7 +519,7 @@ sub connect_error {
   my $host = $self->[REQ_HOST];
   my $port = $self->[REQ_PORT];
 
-  $message = "Cannon connect to $host:$port ($message)";
+  $message = "Cannot connect to $host:$port ($message)";
   $self->error (RC_INTERNAL_SERVER_ERROR, $message);
   return;
 }
