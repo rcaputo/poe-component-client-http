@@ -369,7 +369,7 @@ sub poco_weeble_io_error {
   my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
   #K or die "!!!: unexpectedly undefined request ID" unless defined $request_id;
 
-  if ($request_id ) {
+  if ($request_id) {
 
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
@@ -422,6 +422,7 @@ sub poco_weeble_io_error {
         return;
       }
     }
+
     # We haven't built a proper response.  Send back an error.
     $request->error (400, "incomplete response $request_id");
   }
@@ -441,7 +442,7 @@ sub poco_weeble_io_read {
   DEBUG and warn "I/O: wheel $wheel_id got input...";
   DEBUG_DATA and warn (ref($input) ? $input->as_string : _hexdump($input));
 
-	# TODO - So, which is it?  Return, or die?
+  # TODO - So, which is it?  Return, or die?
   return unless defined $request_id;
   die unless defined $request_id;
   my $request = $heap->{request}->{$request_id};
@@ -488,7 +489,7 @@ sub poco_weeble_io_read {
         and $input->content_length() == 0
       )
     ) {
-			return if _try_redirect($request_id, $input, $request);
+      return if _try_redirect($request_id, $input, $request);
       $request->[REQ_STATE] |= RS_DONE;
       $request->remove_timeout();
       _finish_request($heap, $request, 1);
@@ -496,10 +497,10 @@ sub poco_weeble_io_read {
     }
     else {
       $request->[REQ_STATE] = RS_IN_CONTENT;
-			#FIXME: probably want to find out when the content from this
-			#       request is in, and only then do the new request, so we
-			#       can reuse the connection.
-			return if _try_redirect($request_id, $input, $request);
+      #FIXME: probably want to find out when the content from this
+      #       request is in, and only then do the new request, so we
+      #       can reuse the connection.
+      return if _try_redirect($request_id, $input, $request);
 
       # RFC 2616 14.41:  If multiple encodings have been applied to an
       # entity, the transfer-codings MUST be listed in the order in
@@ -606,29 +607,29 @@ sub _hexdump {
 # occur, or false if there's no redirect.
 
 sub _try_redirect {
-	my ($request_id, $input, $request) = @_;
+  my ($request_id, $input, $request) = @_;
 
-	if (my $newrequest = $request->check_redirect) {
-		DEBUG and warn "Redirected $request_id ", $input->code;
-		my @proxy;
-		if ($request->[REQ_USING_PROXY]) {
-			push @proxy, (
-				'http://' .  $request->host .  ':' .  $request->port .  '/'
-			);
-		}
-		$poe_kernel->yield (
-			request =>
-			$request,
-			$newrequest,
-			"_redir_".$request->ID,
-			$request->[REQ_PROG_POSTBACK],
-			@proxy
-		);
+  if (my $newrequest = $request->check_redirect) {
+    DEBUG and warn "Redirected $request_id ", $input->code;
+    my @proxy;
+    if ($request->[REQ_USING_PROXY]) {
+      push @proxy, (
+        'http://' .  $request->host .  ':' .  $request->port .  '/'
+      );
+    }
+    $poe_kernel->yield (
+      request =>
+      $request,
+      $newrequest,
+      "_redir_".$request->ID,
+      $request->[REQ_PROG_POSTBACK],
+      @proxy
+    );
 
-		return 1;
-	}
+    return 1;
+  }
 
-	return;
+  return;
 }
 
 # Complete a request. This was moved out of poco_weeble_io_error(). This is

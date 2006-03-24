@@ -202,7 +202,14 @@ sub add_eof {
   # RFC 2616: "If a message is received with both a Transfer-Encoding
   # header field and a Content-Length header field, the latter MUST be
   # ignored."
+  #
+  # Google returns a Content-Length header with its HEAD request,
+  # generating "incomplete response" errors.  Added a special case to
+  # ignore content for HEAD requests.  This may thwart keep-alive,
+  # however.
+
   if (
+    $self->[REQ_REQUEST]->method() ne "HEAD" and
     defined $self->[REQ_RESPONSE]->content_length and
     not defined $self->[REQ_RESPONSE]->header("Transfer-Encoding") and
     $self->[REQ_OCTETS_GOT] < $self->[REQ_RESPONSE]->content_length
