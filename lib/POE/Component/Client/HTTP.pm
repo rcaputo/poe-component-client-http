@@ -11,7 +11,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.73';
+$VERSION = '0.74';
 
 use Carp qw(croak);
 use POSIX;
@@ -447,7 +447,9 @@ sub poco_weeble_io_read {
   die unless defined $request_id;
   my $request = $heap->{request}->{$request_id};
   return unless defined $request;
-  DEBUG and warn "REQUEST is $request";
+  DEBUG and warn(
+    "REQUEST $request_id is $request <" . $request->[REQ_REQUEST]->uri . ">"
+  );
 
   # Reset the timeout if we get data.
   $kernel->delay_adjust($request->timer, $heap->{factory}->timeout);
@@ -489,7 +491,15 @@ sub poco_weeble_io_read {
         and $input->content_length() == 0
       )
     ) {
-      return if _try_redirect($request_id, $input, $request);
+      if (_try_redirect($request_id, $input, $request)) {
+        my $old_request = delete $heap->{request}->{$request_id};
+        if (defined $old_request) {
+          DEBUG and warn "I/O: removed request $request_id";
+          $old_request->remove_timeout();
+          $old_request->[REQ_CONNECTION] = undef;
+        }
+        return;
+      }
       $request->[REQ_STATE] |= RS_DONE;
       $request->remove_timeout();
       _finish_request($heap, $request, 1);
@@ -500,7 +510,15 @@ sub poco_weeble_io_read {
       #FIXME: probably want to find out when the content from this
       #       request is in, and only then do the new request, so we
       #       can reuse the connection.
-      return if _try_redirect($request_id, $input, $request);
+      if (_try_redirect($request_id, $input, $request)) {
+        my $old_request = delete $heap->{request}->{$request_id};
+        if (defined $old_request) {
+          DEBUG and warn "I/O: removed request $request_id";
+          $old_request->remove_timeout();
+          $old_request->[REQ_CONNECTION] = undef;
+        }
+        return;
+      }
 
       # RFC 2616 14.41:  If multiple encodings have been applied to an
       # entity, the transfer-codings MUST be listed in the order in
@@ -610,14 +628,18 @@ sub _try_redirect {
   my ($request_id, $input, $request) = @_;
 
   if (my $newrequest = $request->check_redirect) {
-    DEBUG and warn "Redirected $request_id ", $input->code;
+    DEBUG and warn(
+      "Redirected $request_id ", $input->code, " to <",
+      $newrequest->uri, ">"
+    );
     my @proxy;
     if ($request->[REQ_USING_PROXY]) {
       push @proxy, (
         'http://' .  $request->host .  ':' .  $request->port .  '/'
       );
     }
-    $poe_kernel->yield (
+
+    $poe_kernel->yield(
       request =>
       $request,
       $newrequest,
@@ -1015,9 +1037,6 @@ distribution.
 
 =head1 BUGS
 
-The following spawn() parameters are accepted but not yet implemented:
-Timeout.
-
 There is no support for CGI_PROXY or CgiProxy.
 
 Secure HTTP (https) proxying is not supported at this time.
@@ -1030,7 +1049,7 @@ POE::Component::Client::HTTP is
 
 =item
 
-Copyright 1999-2005 Rocco Caputo
+Copyright 1999-2006 Rocco Caputo
 
 =item
 
