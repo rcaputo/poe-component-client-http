@@ -447,6 +447,7 @@ sub poco_weeble_io_read {
   # TODO - So, which is it?  Return, or die?
   return unless defined $request_id;
   die unless defined $request_id;
+
   my $request = $heap->{request}->{$request_id};
   return unless defined $request;
   DEBUG and warn(
@@ -517,6 +518,7 @@ sub poco_weeble_io_read {
         if (defined $old_request) {
           DEBUG and warn "I/O: removed request $request_id";
           $old_request->remove_timeout();
+          $old_request->[REQ_CONNECTION]->close();
           $old_request->[REQ_CONNECTION] = undef;
         }
         return;
@@ -678,7 +680,7 @@ sub _finish_request {
   # KeepAlive: added the RS_POSTED flag
   $request->[REQ_STATE] |= RS_POSTED;
 
-  my $wheel_id = $request->wheel->ID;
+  my $wheel_id = defined $request->wheel ? $request->wheel->ID : "(undef)";
   DEBUG and warn "Wheel from request is ", $wheel_id;
   # clean up the request
   my $address = "$request->[REQ_HOST]:$request->[REQ_PORT]";

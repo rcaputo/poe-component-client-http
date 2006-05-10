@@ -291,6 +291,7 @@ sub add_content {
     );
     $self->[REQ_STATE] |= RS_DONE;
     $self->[REQ_STATE] &= ~RS_IN_CONTENT;
+    $self->[REQ_CONNECTION]->close();
     return 1;
   }
 
@@ -512,6 +513,7 @@ sub error {
   $r->content ($m);
   $r->request ($self->[REQ_REQUEST]);
   $self->[REQ_POSTBACK]->($r);
+  $self->[REQ_STATE] |= RS_POSTED;
 }
 
 sub connect_error {

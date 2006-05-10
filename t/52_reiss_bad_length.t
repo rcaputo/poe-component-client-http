@@ -14,6 +14,7 @@ use IO::Socket::INET;
 use Socket '$CRLF';
 use HTTP::Request::Common 'GET';
 
+sub POE_ASSERT_DEFAULT() { 1 }
 sub DEBUG () { 0 }
 
 # The number of tests must match scalar(@responses) * 2.
