@@ -168,6 +168,7 @@ sub poco_weeble_request {
        . "</BODY>\n"
        . "</HTML>\n"
       );
+    $rsp->request($http_request);
     $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
     return;
   }
@@ -417,6 +418,7 @@ sub poco_weeble_io_error {
           200, 'OK', [ 'Content-Type' => 'text/html' ], $text
         );
         $request->[REQ_RESPONSE]->protocol('HTTP/0.9');
+        $request->[REQ_RESPONSE]->request($request->[REQ_REQUEST]);
         $request->[REQ_STATE] = RS_DONE;
         $request->return_response;
         return;
@@ -681,6 +683,8 @@ sub _finish_request {
   # clean up the request
   my $address = "$request->[REQ_HOST]:$request->[REQ_PORT]";
 
+  DEBUG and warn "address is $address";
+
   if ($wait) {
     #wait a bit with removing the request, so there's
     #time to receive the EOF event in case the connection
@@ -688,7 +692,9 @@ sub _finish_request {
     my $alarm_id = $poe_kernel->delay_set('remove_request', 0.5, $request_id);
 
     # remove the old timeout first
+    DEBUG and warn "delay_set; now remove_timeout()";
     $request->remove_timeout();
+    DEBUG and warn "removed timeout; now timer()"; 
     $request->timer($alarm_id);
   }
   else {

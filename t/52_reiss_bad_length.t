@@ -4,6 +4,9 @@
 # There are cases where POE::Component::Client::HTTP generates no
 # responses.  This exercises some of them.
 
+# This also test cases where, after the above bug was fix,
+# the HTTP::Response objects would be incomplete.
+
 use warnings;
 use strict;
 
@@ -13,8 +16,8 @@ use HTTP::Request::Common 'GET';
 
 sub DEBUG () { 0 }
 
-# The number of tests must match scalar(@responses).
-use Test::More tests => 4;
+# The number of tests must match scalar(@responses) * 2.
+use Test::More tests => 8;
 
 use POE;
 use POE::Component::Client::HTTP;
@@ -118,6 +121,8 @@ POE::Session->create(
       $content =~ s/\x0A/{LF}/g;
 
       pass "got a response, content = ($content)";
+
+      ok(defined $response->request, "response has corresponding request object set");
     },
     _stop => sub { exit },  # Nasty but expedient.
   }

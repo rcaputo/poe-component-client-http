@@ -510,6 +510,7 @@ sub error {
   );
 
   $r->content ($m);
+  $r->request ($self->[REQ_REQUEST]);
   $self->[REQ_POSTBACK]->($r);
 }
 
