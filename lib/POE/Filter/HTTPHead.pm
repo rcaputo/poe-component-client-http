@@ -3,6 +3,8 @@
 package POE::Filter::HTTPHead_Line;
 use strict;
 
+use base 'POE::Filter';
+
 use HTTP::Response;
 
 sub FRAMING_BUFFER   () { 0 }
