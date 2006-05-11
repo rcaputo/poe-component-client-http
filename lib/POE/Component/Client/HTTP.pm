@@ -509,7 +509,8 @@ sub poco_weeble_io_read {
       return;
     }
     else {
-      $request->[REQ_STATE] = RS_IN_CONTENT;
+      $request->[REQ_STATE] |= RS_IN_CONTENT;
+      $request->[REQ_STATE] &= ~RS_IN_HEAD;
       #FIXME: probably want to find out when the content from this
       #       request is in, and only then do the new request, so we
       #       can reuse the connection.
