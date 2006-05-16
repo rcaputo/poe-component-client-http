@@ -496,6 +496,7 @@ sub poco_weeble_io_read {
     ) {
       if (_try_redirect($request_id, $input, $request)) {
         my $old_request = delete $heap->{request}->{$request_id};
+        delete $heap->{wheel_to_request}->{$wheel_id};
         if (defined $old_request) {
           DEBUG and warn "I/O: removed request $request_id";
           $old_request->remove_timeout();
@@ -516,6 +517,7 @@ sub poco_weeble_io_read {
       #       can reuse the connection.
       if (_try_redirect($request_id, $input, $request)) {
         my $old_request = delete $heap->{request}->{$request_id};
+        delete $heap->{wheel_to_request}->{$wheel_id};
         if (defined $old_request) {
           DEBUG and warn "I/O: removed request $request_id";
           $old_request->remove_timeout();
@@ -703,6 +705,9 @@ sub _finish_request {
   else {
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
+    if (my $wheel = $request->wheel) {
+      delete $heap->{wheel_to_request}->{$wheel->ID};
+    }
     $request->remove_timeout() if $request;
   }
 }
@@ -717,6 +722,9 @@ sub poco_weeble_remove_request {
   if (defined $request) {
     DEBUG and warn "I/O: removed request $request_id";
     $request->remove_timeout();
+    if (my $wheel = $request->wheel) {
+      delete $heap->{wheel_to_request}->{$wheel->ID};
+    }
   }
 }
 #}}} _remove_request
