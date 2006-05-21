@@ -490,6 +490,8 @@ sub wheel {
     #$self->[REQ_WHEEL] = undef;
     #$self->[REQ_WHEEL] = $new_wheel;
   #}
+
+  return unless $self->[REQ_CONNECTION];
   return $self->[REQ_CONNECTION]->wheel;
 }
 

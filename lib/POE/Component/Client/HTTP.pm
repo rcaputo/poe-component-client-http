@@ -14,11 +14,7 @@ use vars qw($VERSION);
 $VERSION = '0.74';
 
 use Carp qw(croak);
-use POSIX;
-use Symbol qw(gensym);
 use HTTP::Response;
-use HTTP::Status qw(status_message);
-use URI;
 
 use POE::Component::Client::HTTP::RequestFactory;
 use POE::Component::Client::HTTP::Request qw(:states :fields);
@@ -34,10 +30,9 @@ BEGIN {
 }
 
 use POE qw(
-  Wheel::SocketFactory Wheel::ReadWrite
   Driver::SysRW Filter::Stream
   Filter::HTTPHead Filter::HTTPChunk
-  Component::Client::DNS Component::Client::Keepalive
+  Component::Client::Keepalive
 );
 
 my %te_filters = (
@@ -88,6 +83,7 @@ sub spawn {
       # Public interface.
       request                => \&poco_weeble_request,
       pending_requests_count => \&poco_weeble_pending_requests_count,
+      'shutdown'             => \&poco_weeble_shutdown,
 
       # Client::Keepalive interface.
       got_connect_done  => \&poco_weeble_connect_done,
@@ -102,9 +98,10 @@ sub spawn {
       remove_request    => \&poco_weeble_remove_request,
     },
     heap => {
-      alias   => $alias,
-      factory => $request_factory,
-      cm      => $cm,
+      alias       => $alias,
+      factory     => $request_factory,
+      cm          => $cm,
+      is_shutdown => 0,
     },
   );
 
@@ -131,10 +128,14 @@ sub poco_weeble_start {
 # {{{ poco_weeble_stop
 
 sub poco_weeble_stop {
-  my $heap = shift;
+  my $heap = $_[HEAP];
   my $request = delete $heap->{request};
-  $request->remove_timeout() if $request;
-  DEBUG and warn "$heap->{alias} stopped.";
+
+  foreach my $request_rec (values %$request) {
+    $request_rec->remove_timeout();
+  }
+
+  DEBUG and warn "Client::HTTP (alias=$heap->{alias}) stopped.";
 }
 
 # }}} poco_weeble_stop
@@ -165,6 +166,23 @@ sub poco_weeble_request {
        . "<BODY>\n"
        . "<H1>Error: Bad Request</H1>\n"
        . "Unsupported URI scheme\n"
+       . "</BODY>\n"
+       . "</HTML>\n"
+      );
+    $rsp->request($http_request);
+    $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
+    return;
+  }
+
+  if ($heap->{is_shutdown}) {
+    my $rsp = HTTP::Response->new(
+       408 => 'Request timed out (component shut down)', [],
+       "<html>\n"
+       . "<HEAD><TITLE>Error: Request timed out (component shut down)"
+       . "</TITLE></HEAD>\n"
+       . "<BODY>\n"
+       . "<H1>Error: Request Timeout</H1>\n"
+       . "Request timed out (component shut down)\n"
        . "</BODY>\n"
        . "</HTML>\n"
       );
@@ -242,7 +260,6 @@ sub poco_weeble_connect_done {
     $heap->{wheel_to_request}->{ $new_wheel->ID() } = $request_id;
 
     $request->[REQ_CONNECTION] = $connection;
-
     $request->create_timer ($heap->{factory}->timeout);
     $request->send_to_wheel;
   }
@@ -703,6 +720,8 @@ sub _finish_request {
     $request->timer($alarm_id);
   }
   else {
+    # Virtually identical to _remove_request.
+    # TODO - Make a common sub to handle both cases?
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
     if (my $wheel = $request->wheel) {
@@ -728,6 +747,40 @@ sub poco_weeble_remove_request {
   }
 }
 #}}} _remove_request
+
+# Shut down the entire component.
+sub poco_weeble_shutdown {
+  my ($kernel, $heap) = @_[KERNEL, HEAP];
+
+  $heap->{is_shut_down} = 1;
+
+  my @request_ids = keys %{$heap->{request}};
+  foreach my $request_id (@request_ids) {
+    my $request = delete $heap->{request}{$request_id};
+    if (defined $request) {
+      DEBUG and warn "SHT: Shutdown is canceling request $request_id";
+      $request->remove_timeout();
+      if (my $wheel = $request->wheel) {
+        my $wheel_id = $wheel->ID;
+        DEBUG and warn "SHT: Request $request_id canceling wheel $wheel_id";
+        delete $heap->{wheel_to_request}{$wheel_id};
+      }
+      unless ($request->[REQ_STATE] & RS_POSTED) {
+        $request->error(408, "Request timed out (component shut down)");
+      }
+    }
+  }
+
+  # Shut down the connection manager subcomponent.
+  if (defined $heap->{cm}) {
+    DEBUG and warn "SHT: Client::HTTP shutting down Client::Keepalive";
+    $heap->{cm}->shutdown();
+    delete $heap->{cm};
+  }
+
+  # Final cleanup of this component.
+  $kernel->alias_remove($heap->{alias});
+}
 
 1;
 
@@ -1057,6 +1110,13 @@ distribution.
 There is no support for CGI_PROXY or CgiProxy.
 
 Secure HTTP (https) proxying is not supported at this time.
+
+There is no object oriented interface.  See
+L<POE::Component::Client::Keepalive> and
+L<POE::Component::Client::DNS> for examples of a decent OO interface.
+An OO interface here would allow us to return handles for each
+request, which in turn would give users the ability to manipulate
+(namely shutdown) individual requests.
 
 =head1 AUTHOR & COPYRIGHTS
 
