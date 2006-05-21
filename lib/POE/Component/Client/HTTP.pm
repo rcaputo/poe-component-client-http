@@ -11,7 +11,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.74';
+$VERSION = '0.75';
 
 use Carp qw(croak);
 use HTTP::Response;
@@ -1030,6 +1030,11 @@ requests currently being processed.  To receive the return value, it
 must be invoked with $kernel->call().
 
   my $count = $kernel->call('ua' => 'pending_requests_count');
+
+=head2 shutdown
+
+Responds to all pending requests with 408 (request timeout), and then
+shuts down the component and all subcomponents.
 
 =head1 SENT EVENTS
 
