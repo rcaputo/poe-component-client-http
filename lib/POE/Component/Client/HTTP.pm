@@ -11,7 +11,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.75';
+$VERSION = '0.76';
 
 use Carp qw(croak);
 use HTTP::Response;
@@ -84,6 +84,7 @@ sub spawn {
       request                => \&poco_weeble_request,
       pending_requests_count => \&poco_weeble_pending_requests_count,
       'shutdown'             => \&poco_weeble_shutdown,
+      cancel                 => \&poco_weeble_cancel,
 
       # Client::Keepalive interface.
       got_connect_done  => \&poco_weeble_connect_done,
@@ -200,6 +201,7 @@ sub poco_weeble_request {
     $proxy_override, $sender
   );
   $heap->{request}->{$request->ID} = $request;
+  $heap->{request_to_id}->{$http_request} = $request->ID;
 
   my @timeout;
   if ($heap->{factory}->timeout()) {
@@ -320,6 +322,7 @@ sub poco_weeble_timeout {
     # Shut down the connection so it's not reused.
     $wheel->shutdown_input();
     delete $heap->{wheel_to_request}->{$wheel_id};
+    delete $heap->{request_to_id}->{$request->[REQ_REQUEST]};
   }
 
   DEBUG and do {
@@ -391,6 +394,7 @@ sub poco_weeble_io_error {
 
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
+    delete $heap->{request_to_id}{$request->[REQ_REQUEST]};
     $request->remove_timeout;
 
     # Otherwise the remote end simply closed.  If we've got a
@@ -516,6 +520,7 @@ sub poco_weeble_io_read {
         delete $heap->{wheel_to_request}->{$wheel_id};
         if (defined $old_request) {
           DEBUG and warn "I/O: removed request $request_id";
+          delete $heap->{request_to_id}{$old_request->[REQ_REQUEST]};
           $old_request->remove_timeout();
           $old_request->[REQ_CONNECTION] = undef;
         }
@@ -537,6 +542,7 @@ sub poco_weeble_io_read {
         delete $heap->{wheel_to_request}->{$wheel_id};
         if (defined $old_request) {
           DEBUG and warn "I/O: removed request $request_id";
+          delete $heap->{request_to_id}{$old_request->[REQ_REQUEST]};
           $old_request->remove_timeout();
           $old_request->[REQ_CONNECTION]->close();
           $old_request->[REQ_CONNECTION] = undef;
@@ -726,6 +732,7 @@ sub _finish_request {
     my $request = delete $heap->{request}->{$request_id};
     if (my $wheel = $request->wheel) {
       delete $heap->{wheel_to_request}->{$wheel->ID};
+      delete $heap->{request_to_id}{$request->[REQ_REQUEST]};
     }
     $request->remove_timeout() if $request;
   }
@@ -743,10 +750,49 @@ sub poco_weeble_remove_request {
     $request->remove_timeout();
     if (my $wheel = $request->wheel) {
       delete $heap->{wheel_to_request}->{$wheel->ID};
+      delete $heap->{request_to_id}{$request->[REQ_REQUEST]};
     }
   }
 }
 #}}} _remove_request
+
+# Cancel a single request by HTTP::Request object.
+
+sub poco_weeble_cancel {
+  my ($kernel, $heap, $request) = @_[KERNEL, HEAP, ARG0];
+  my $request_id = $heap->{request_to_id}{$request};
+  return unless defined $request_id;
+  _internal_cancel(
+    $heap, $request_id, 408, "Request timed out (request canceled)"
+  );
+}
+
+sub _internal_cancel {
+  my ($heap, $request_id, $code, $message) = @_;
+
+  my $request = delete $heap->{request}{$request_id};
+  return unless defined $request;
+
+  DEBUG and warn "SHT: Shutdown is canceling request $request_id";
+  $request->remove_timeout();
+
+  if (my $wheel = $request->wheel) {
+    my $wheel_id = $wheel->ID;
+    DEBUG and warn "SHT: Request $request_id canceling wheel $wheel_id";
+    delete $heap->{wheel_to_request}{$wheel_id};
+    delete $heap->{request_to_id}{$request->[REQ_REQUEST]};
+		$wheel = undef;
+  }
+
+	if ($request->[REQ_CONNECTION]) {
+		$request->[REQ_CONNECTION]->close();
+		$request->[REQ_CONNECTION] = undef;
+	}
+
+  unless ($request->[REQ_STATE] & RS_POSTED) {
+    $request->error(408, "Request timed out (component shut down)");
+  }
+}
 
 # Shut down the entire component.
 sub poco_weeble_shutdown {
@@ -756,19 +802,9 @@ sub poco_weeble_shutdown {
 
   my @request_ids = keys %{$heap->{request}};
   foreach my $request_id (@request_ids) {
-    my $request = delete $heap->{request}{$request_id};
-    if (defined $request) {
-      DEBUG and warn "SHT: Shutdown is canceling request $request_id";
-      $request->remove_timeout();
-      if (my $wheel = $request->wheel) {
-        my $wheel_id = $wheel->ID;
-        DEBUG and warn "SHT: Request $request_id canceling wheel $wheel_id";
-        delete $heap->{wheel_to_request}{$wheel_id};
-      }
-      unless ($request->[REQ_STATE] & RS_POSTED) {
-        $request->error(408, "Request timed out (component shut down)");
-      }
-    }
+    _internal_cancel(
+      $heap, $request_id, 408, "Request timed out (component shut down)"
+    );
   }
 
   # Shut down the connection manager subcomponent.
@@ -1031,6 +1067,14 @@ must be invoked with $kernel->call().
 
   my $count = $kernel->call('ua' => 'pending_requests_count');
 
+=head2 cancel
+
+Cancel a specific HTTP request.  Requires a copy of the request so it
+knows which one to cancel.  See L<progress handler> below for notes on
+canceling streaming requests.
+
+  $kernel->post( component => cancel => $http_request );
+
 =head2 shutdown
 
 Responds to all pending requests with 408 (request timeout), and then
@@ -1080,6 +1124,9 @@ download completion.
     printf(
       "-- %.0f%% [%d/%d]: %s\n", $percent, $got, $tot, $req->uri()
     );
+
+    # To cancel the request:
+    # $_[KERNEL]->post( component => cancel => $req );
   }
 
 =head3 DEPRECATION WARNING
@@ -1119,9 +1166,6 @@ Secure HTTP (https) proxying is not supported at this time.
 There is no object oriented interface.  See
 L<POE::Component::Client::Keepalive> and
 L<POE::Component::Client::DNS> for examples of a decent OO interface.
-An OO interface here would allow us to return handles for each
-request, which in turn would give users the ability to manipulate
-(namely shutdown) individual requests.
 
 =head1 AUTHOR & COPYRIGHTS
 
