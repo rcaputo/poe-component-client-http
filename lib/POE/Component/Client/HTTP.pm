@@ -1069,11 +1069,17 @@ must be invoked with $kernel->call().
 
 =head2 cancel
 
-Cancel a specific HTTP request.  Requires a copy of the request so it
-knows which one to cancel.  See L<progress handler> below for notes on
-canceling streaming requests.
+Cancel a specific HTTP request.  Requires a reference to the original
+request (blessed or stringified) so it knows which one to cancel.  See
+L<progress handler> below for notes on canceling streaming requests.
+
+To cancel a request based on its blessed HTTP::Request object:
 
   $kernel->post( component => cancel => $http_request );
+
+To cancel a request based on its stringified HTTP::Request object:
+
+  $kernel->post( component => cancel => "$http_request" );
 
 =head2 shutdown
 
