@@ -11,7 +11,7 @@ sub DEBUG      () { 0 }
 sub DEBUG_DATA () { 0 }
 
 use vars qw($VERSION);
-$VERSION = '0.76';
+$VERSION = '0.77';
 
 use Carp qw(croak);
 use HTTP::Response;
@@ -781,13 +781,13 @@ sub _internal_cancel {
     DEBUG and warn "SHT: Request $request_id canceling wheel $wheel_id";
     delete $heap->{wheel_to_request}{$wheel_id};
     delete $heap->{request_to_id}{$request->[REQ_REQUEST]};
-		$wheel = undef;
+    $wheel = undef;
   }
 
-	if ($request->[REQ_CONNECTION]) {
-		$request->[REQ_CONNECTION]->close();
-		$request->[REQ_CONNECTION] = undef;
-	}
+  if ($request->[REQ_CONNECTION]) {
+    $request->[REQ_CONNECTION]->close();
+    $request->[REQ_CONNECTION] = undef;
+  }
 
   unless ($request->[REQ_STATE] & RS_POSTED) {
     $request->error(408, "Request timed out (component shut down)");
@@ -930,6 +930,29 @@ alias is given, the component defaults to "weeble".  The alias lets
 several sessions interact with HTTP components without keeping (or
 even knowing) hard references to them.  It's possible to spawn several
 HTTP components with different names.
+
+=item ConnectionManager => $poco_client_keepalive
+
+C<ConnectionManager> sets this component's connection pool manager.
+It expects the connection manager to be a reference to a
+POE::Component::Client::Keepalive object.  The HTTP client component
+will call C<allocate()> on the connection manager itself so you should
+not have done this already.
+
+  my $pool = POE::Component::Client::Keepalive->new(
+    keep_alive    => 10, # seconds to keep connections alive
+    max_open      => 100, # max concurrent connections - total
+    max_per_host  => 20, # max concurrent connections - per host
+    timeout       => 30, # max time (seconds) to establish a new connection
+  );
+
+  POE::Component::Client::HTTP->spawn(
+    # ...
+    ConnectionManager => $pool,
+    # ...
+  );
+
+See L<POE::Component::Client::Keepalive> for more information.
 
 =item CookieJar => $cookie_jar
 
