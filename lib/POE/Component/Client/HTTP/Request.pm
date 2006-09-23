@@ -31,6 +31,7 @@ sub REQ_PORT          () { 13 }
 sub REQ_HISTORY       () { 14 }
 sub REQ_START_TIME    () { 15 }
 sub REQ_FACTORY       () { 16 }
+sub REQ_CONN_ID       () { 17 }
 
 sub RS_CONNECT      () { 0x01 }
 sub RS_SENDING      () { 0x02 }
@@ -39,6 +40,7 @@ sub RS_REDIRECTED   () { 0x08 }
 sub RS_IN_CONTENT   () { 0x20 }
 sub RS_DONE         () { 0x40 }
 sub RS_POSTED       () { 0x80 }
+
 
 sub import {
   my ($class) = shift;
@@ -52,7 +54,7 @@ sub import {
           REQ_ID REQ_POSTBACK REQ_CONNECTION REQ_REQUEST REQ_STATE
           REQ_RESPONSE REQ_BUFFER REQ_OCTETS_GOT REQ_TIMER
           REQ_PROG_POSTBACK REQ_USING_PROXY REQ_HOST REQ_PORT
-          REQ_HISTORY REQ_START_TIME
+          REQ_HISTORY REQ_START_TIME REQ_CONN_ID
         )
       ) {
         no strict 'refs';
@@ -148,8 +150,9 @@ sub new {
     undef,              # REQ_HISTORY
     time(),             # REQ_START_TIME
     $factory,           # REQ_FACTORY
-   ];
-   return bless $self, $class;
+    undef,              # REQ_CONN_ID
+  ];
+  return bless $self, $class;
 }
 
 sub return_response {

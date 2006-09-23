@@ -210,9 +210,10 @@ sub poco_weeble_request {
     );
   }
 
+  my $cm_req_id;
   eval {
       # get a connection from Client::Keepalive
-      $heap->{cm}->allocate(
+      $request->[REQ_CONN_ID] = $heap->{cm}->allocate(
         scheme  => $request->scheme,
         addr    => $request->host,
         port    => $request->port,
@@ -262,7 +263,7 @@ sub poco_weeble_connect_done {
     $heap->{wheel_to_request}->{ $new_wheel->ID() } = $request_id;
 
     $request->[REQ_CONNECTION] = $connection;
-    $request->create_timer ($heap->{factory}->timeout);
+    $request->create_timer($heap->{factory}->timeout);
     $request->send_to_wheel;
   }
   else {
@@ -787,6 +788,11 @@ sub _internal_cancel {
   if ($request->[REQ_CONNECTION]) {
     $request->[REQ_CONNECTION]->close();
     $request->[REQ_CONNECTION] = undef;
+  }
+  else {
+    # Didn't connect yet; inform connection manager to cancel
+    # connection request.
+    $heap->{cm}->deallocate($request->[REQ_CONN_ID]);
   }
 
   unless ($request->[REQ_STATE] & RS_POSTED) {
