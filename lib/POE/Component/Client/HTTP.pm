@@ -99,10 +99,10 @@ sub spawn {
       remove_request    => \&poco_weeble_remove_request,
     },
     heap => {
-      alias       => $alias,
-      factory     => $request_factory,
-      cm          => $cm,
-      is_shutdown => 0,
+      alias        => $alias,
+      factory      => $request_factory,
+      cm           => $cm,
+      is_shut_down => 0,
     },
   );
 
@@ -175,7 +175,7 @@ sub poco_weeble_request {
     return;
   }
 
-  if ($heap->{is_shutdown}) {
+  if ($heap->{is_shut_down}) {
     my $rsp = HTTP::Response->new(
        408 => 'Request timed out (component shut down)', [],
        "<html>\n"
