@@ -723,7 +723,7 @@ sub _finish_request {
     # remove the old timeout first
     DEBUG and warn "delay_set; now remove_timeout()";
     $request->remove_timeout();
-    DEBUG and warn "removed timeout; now timer()"; 
+    DEBUG and warn "removed timeout; now timer()";
     $request->timer($alarm_id);
   }
   else {
