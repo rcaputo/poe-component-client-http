@@ -6,11 +6,12 @@ use strict;
 use warnings;
 use HTTP::Request;
 use HTTP::Status;
-use Test::More tests => 9;
+use Test::More tests => 16;
 
 use constant DEBUG => 0;
 
 sub POE::Kernel::TRACE_EVENTS     () { 0 }
+sub POE::Kernel::TRACE_REFCNT     () { 0 }
 sub POE::Kernel::CATCH_EXCEPTIONS () { 0 }
 use POE qw(Component::Client::HTTP);
 
@@ -55,20 +56,32 @@ exit;
 
 sub client_start{
   my $request = HTTP::Request->new('GET', "http://www.google.com/");
-  $_[KERNEL]->post( ua => request => response => $request );
+  ok(
+	$_[KERNEL]->post( ua => request => response => $request ),
+	"post 1st req succeeds"
+  );
 
   my $req2 = HTTP::Request->new('GET', "http://www.google.com/");
-  $_[KERNEL]->post( ua => request => response => $req2 );
+  ok(
+    $_[KERNEL]->post( ua => request => response => $req2 ),
+	"post 2nd req succeeds"
+  );
 
   my $req3 = HTTP::Request->new('GET', "http://poe.perl.org/");
-  $_[KERNEL]->post( ua => request => response => $req3 );
+  ok (
+    $_[KERNEL]->post( ua => request => response => $req3 ),
+	"post 3rd req succeeds"
+  );
+	
 
-  $_[KERNEL]->post( ua => cancel => $request );
+  ok( $_[KERNEL]->post( ua => cancel => $request ), "cancel 1st req succeeds" );
+
 }
 
 
 sub response_handler {
   my $response = $_[ARG1][0];
+  ok(defined $response, "got a " . $response->code . " HTTP response");
   if (DEBUG) {
     print $response->as_string();
     print "\n\n", $response->server, "\n\n";
