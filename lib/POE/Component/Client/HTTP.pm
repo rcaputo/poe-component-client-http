@@ -729,13 +729,15 @@ sub _finish_request {
   else {
     # Virtually identical to _remove_request.
     # TODO - Make a common sub to handle both cases?
-    DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
-    if (my $wheel = $request->wheel) {
-      delete $heap->{wheel_to_request}->{$wheel->ID};
-      delete $heap->{request_to_id}{$request->[REQ_REQUEST]};
+    if (defined $request) {
+      DEBUG and warn "I/O: removing request $request_id";
+      $request->remove_timeout();
+      if (my $wheel = $request->wheel) {
+        delete $heap->{wheel_to_request}->{$wheel->ID};
+        delete $heap->{request_to_id}{$request->[REQ_REQUEST]};
+      }
     }
-    $request->remove_timeout() if $request;
   }
 }
 
