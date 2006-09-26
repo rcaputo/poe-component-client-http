@@ -27,6 +27,7 @@ POE::Session->create(
 our %responses;
 eval { POE::Kernel->run(); };
 ok (!$@, "cancelling req before connection succeeds does not die");
+diag($@) if $@;
 is (scalar keys %responses, 2, "got 2 HTTP responses");
 ok (exists $responses{'http://poe.perl.org/'}, "got response from poe.perl.org");
 ok (exists $responses{'http://www.google.com/'}, "got response from poe.perl.org");
