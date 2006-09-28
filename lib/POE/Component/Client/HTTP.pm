@@ -1228,6 +1228,11 @@ All rights are reserved.  POE::Component::Client::HTTP is free
 software; you may redistribute it and/or modify it under the same
 terms as Perl itself.
 
+=head1 CONTRIBUTORS
+
+Joel Bernstein solved some nasty race conditions.  Portugal Telecom
+L<http://www.sapo.pt/> was kind enough to support his contributions.
+
 =head1 CONTACT
 
 Rocco may be contacted by e-mail via L<mailto:rcaputo@cpan.org>, and
