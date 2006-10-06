@@ -1,10 +1,12 @@
 # $Id$
 
 package POE::Filter::HTTPChunk;
+use warnings;
 use strict;
 
 use Carp;
 use bytes;
+use base 'POE::Filter';
 
 use HTTP::Response;
 

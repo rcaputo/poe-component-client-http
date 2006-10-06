@@ -1,6 +1,7 @@
 # $Id$
 
 package POE::Filter::HTTPHead_Line;
+use warnings;
 use strict;
 
 use base 'POE::Filter';
