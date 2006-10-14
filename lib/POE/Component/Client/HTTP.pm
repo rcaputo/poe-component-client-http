@@ -7,8 +7,8 @@ package POE::Component::Client::HTTP;
 use strict;
 #use bytes; # for utf8 compatibility
 
-sub DEBUG      () { 0 }
-sub DEBUG_DATA () { 0 }
+use constant DEBUG      => 0;
+use constant DEBUG_DATA => 0;
 
 use vars qw($VERSION);
 $VERSION = '0.78';
@@ -76,27 +76,27 @@ sub spawn {
 
   POE::Session->create(
     inline_states => {
-      _start  => \&poco_weeble_start,
-      _stop   => \&poco_weeble_stop,
+      _start  => \&_poco_weeble_start,
+      _stop   => \&_poco_weeble_stop,
       _child  => sub { },
 
       # Public interface.
-      request                => \&poco_weeble_request,
-      pending_requests_count => \&poco_weeble_pending_requests_count,
-      'shutdown'             => \&poco_weeble_shutdown,
-      cancel                 => \&poco_weeble_cancel,
+      request                => \&_poco_weeble_request,
+      pending_requests_count => \&_poco_weeble_pending_requests_count,
+      'shutdown'             => \&_poco_weeble_shutdown,
+      cancel                 => \&_poco_weeble_cancel,
 
       # Client::Keepalive interface.
-      got_connect_done  => \&poco_weeble_connect_done,
+      got_connect_done  => \&_poco_weeble_connect_done,
 
       # ReadWrite interface.
-      got_socket_input  => \&poco_weeble_io_read,
-      got_socket_flush  => \&poco_weeble_io_flushed,
-      got_socket_error  => \&poco_weeble_io_error,
+      got_socket_input  => \&_poco_weeble_io_read,
+      got_socket_flush  => \&_poco_weeble_io_flushed,
+      got_socket_error  => \&_poco_weeble_io_error,
 
       # I/O timeout.
-      got_timeout       => \&poco_weeble_timeout,
-      remove_request    => \&poco_weeble_remove_request,
+      got_timeout       => \&_poco_weeble_timeout,
+      remove_request    => \&_poco_weeble_remove_request,
     },
     heap => {
       alias        => $alias,
@@ -111,9 +111,9 @@ sub spawn {
 
 # }}} spawn
 # ------------------------------------------------------------------------------
-# {{{ poco_weeble_start
+# {{{ _poco_weeble_start
 
-sub poco_weeble_start {
+sub _poco_weeble_start {
   my ($kernel, $heap) = @_[KERNEL, HEAP];
 
   $kernel->alias_set($heap->{alias});
@@ -124,11 +124,11 @@ sub poco_weeble_start {
   ) unless ($heap->{cm});
 }
 
-# }}} poco_weeble_start
+# }}} _poco_weeble_start
 #------------------------------------------------------------------------------
-# {{{ poco_weeble_stop
+# {{{ _poco_weeble_stop
 
-sub poco_weeble_stop {
+sub _poco_weeble_stop {
   my $heap = $_[HEAP];
   my $request = delete $heap->{request};
 
@@ -139,20 +139,20 @@ sub poco_weeble_stop {
   DEBUG and warn "Client::HTTP (alias=$heap->{alias}) stopped.";
 }
 
-# }}} poco_weeble_stop
-# {{{ poco_weeble_pending_requests_count
+# }}} _poco_weeble_stop
+# {{{ _poco_weeble_pending_requests_count
 
-sub poco_weeble_pending_requests_count {
+sub _poco_weeble_pending_requests_count {
   my ($heap) = $_[HEAP];
   my $r = $heap->{request} || {};
   return keys %$r;
 }
 
-# }}} poco_weeble_pending_requests_count
+# }}} _poco_weeble_pending_requests_count
 #------------------------------------------------------------------------------
-# {{{ poco_weeble_request
+# {{{ _poco_weeble_request
 
-sub poco_weeble_request {
+sub _poco_weeble_request {
   my (
     $kernel, $heap, $sender,
     $response_event, $http_request, $tag, $progress_event,
@@ -229,12 +229,12 @@ sub poco_weeble_request {
   }
 }
 
-# }}} poco_weeble_request
+# }}} _poco_weeble_request
 
 #------------------------------------------------------------------------------
-# {{{ poco_weeble_connect_done
+# {{{ _poco_weeble_connect_done
 
-sub poco_weeble_connect_done {
+sub _poco_weeble_connect_done {
   my ($heap, $response) = @_[HEAP, ARG0];
 
   my $connection = $response->{'connection'};
@@ -291,11 +291,11 @@ sub poco_weeble_connect_done {
   }
 }
 
-# }}} poco_weeble_connect_done
+# }}} _poco_weeble_connect_done
 
-# {{{ poco_weeble_timeout
+# {{{ _poco_weeble_timeout
 
-sub poco_weeble_timeout {
+sub _poco_weeble_timeout {
   my ($kernel, $heap, $request_id) = @_[KERNEL, HEAP, ARG0];
 
   DEBUG and warn "T/O: request $request_id timed out";
@@ -348,11 +348,11 @@ sub poco_weeble_timeout {
   }
 }
 
-# }}} poco_weeble_timeout
+# }}} _poco_weeble_timeout
 #------------------------------------------------------------------------------
-# {{{ poco_weeble_io_flushed
+# {{{ _poco_weeble_io_flushed
 
-sub poco_weeble_io_flushed {
+sub _poco_weeble_io_flushed {
   my ($heap, $wheel_id) = @_[HEAP, ARG0];
 
   # We sent the request.  Now we're looking for a response.  It may be
@@ -376,11 +376,11 @@ sub poco_weeble_io_flushed {
   # $request->wheel->shutdown_output();
 }
 
-# }}} poco_weeble_io_flushed
+# }}} _poco_weeble_io_flushed
 #------------------------------------------------------------------------------
-# {{{ poco_weeble_io_error
+# {{{ _poco_weeble_io_error
 
-sub poco_weeble_io_error {
+sub _poco_weeble_io_error {
   my ($kernel, $heap, $operation, $errnum, $errstr, $wheel_id) =
     @_[KERNEL, HEAP, ARG0..ARG3];
 
@@ -452,14 +452,14 @@ sub poco_weeble_io_error {
   }
 }
 
-# }}} poco_weeble_io_error
+# }}} _poco_weeble_io_error
 #------------------------------------------------------------------------------
 # Read a chunk of response.  This code is directly adapted from Artur
 # Bergman's nifty POE::Filter::HTTPD, which does pretty much the same
 # in the other direction.
-# {{{ poco_weeble_io_read
+# {{{ _poco_weeble_io_read
 
-sub poco_weeble_io_read {
+sub _poco_weeble_io_read {
   my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
   my $request_id = $heap->{wheel_to_request}->{$wheel_id};
 
@@ -623,7 +623,7 @@ sub poco_weeble_io_read {
 
 }
 
-# }}} poco_weeble_io_read
+# }}} _poco_weeble_io_read
 
 
 #------------------------------------------------------------------------------
@@ -685,7 +685,7 @@ sub _try_redirect {
   return;
 }
 
-# Complete a request. This was moved out of poco_weeble_io_error(). This is
+# Complete a request. This was moved out of _poco_weeble_io_error(). This is
 # not a POE function.
 # {{{ _finish_request
 
@@ -744,7 +744,7 @@ sub _finish_request {
 # }}} _finish_request
 
 #{{{ _remove_request
-sub poco_weeble_remove_request {
+sub _poco_weeble_remove_request {
   my ($kernel, $heap, $request_id) = @_[KERNEL, HEAP, ARG0];
 
   my $request = delete $heap->{request}->{$request_id};
@@ -761,7 +761,7 @@ sub poco_weeble_remove_request {
 
 # Cancel a single request by HTTP::Request object.
 
-sub poco_weeble_cancel {
+sub _poco_weeble_cancel {
   my ($kernel, $heap, $request) = @_[KERNEL, HEAP, ARG0];
   my $request_id = $heap->{request_to_id}{$request};
   return unless defined $request_id;
@@ -803,7 +803,7 @@ sub _internal_cancel {
 }
 
 # Shut down the entire component.
-sub poco_weeble_shutdown {
+sub _poco_weeble_shutdown {
   my ($kernel, $heap) = @_[KERNEL, HEAP];
 
   $heap->{is_shut_down} = 1;

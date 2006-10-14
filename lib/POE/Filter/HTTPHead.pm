@@ -73,7 +73,7 @@ sub get_one {
         return [];
       }
       DEBUG and warn "got more lines";
-      while ($self->[FRAMING_BUFFER]->[0] =~ /^[\t ]/) {
+      while ($self->[FRAMING_BUFFER]->[0] && $self->[FRAMING_BUFFER]->[0] =~ /^[\t ]/) {
         my $next_line = shift (@{$self->[FRAMING_BUFFER]});
         $next_line =~ s/^[\t ]+//;
         $line .= $next_line;
@@ -143,6 +143,12 @@ $VERSION = '0.01';
 use base qw(POE::Filter::Stackable);
 use POE::Filter::Line;
 
+=head2 new
+
+FIXME
+
+=cut
+
 sub new {
   my $type = shift;
 
@@ -159,6 +165,10 @@ sub new {
 =head1 METHODS
 
 See L<POE::Filter> for documentation of the public API.
+
+=head2 get_pending
+
+FIXME
 
 =cut
 

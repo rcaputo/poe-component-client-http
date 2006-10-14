@@ -10,20 +10,20 @@ use base 'POE::Filter';
 
 use HTTP::Response;
 
-sub FRAMING_BUFFER   () { 0 }
-sub CURRENT_STATE    () { 1 }
-sub CHUNK_SIZE       () { 2 }
-sub CHUNK_BUFFER     () { 3 }
-sub TRAILER_HEADERS  () { 4 }
+use constant FRAMING_BUFFER  => 0;
+use constant CURRENT_STATE   => 1;
+use constant CHUNK_SIZE      => 2;
+use constant CHUNK_BUFFER    => 3;
+use constant TRAILER_HEADERS => 4;
 
-sub STATE_SIZE    () { 0x01 }  # waiting for a status line
-sub STATE_DATA    () { 0x02 }  # received status, looking for header or end
-sub STATE_TRAILER () { 0x04 }  # received status, looking for header or end
+use constant STATE_SIZE      => 0x01;  # waiting for a status line
+use constant STATE_DATA      => 0x02;  # received status, looking for header or end
+use constant STATE_TRAILER   => 0x04;  # received status, looking for header or end
 
-sub DEBUG () { 0 }
+use constant DEBUG           => 0;
 
 sub new {
-  my $type = shift;
+  my ($class) = @_;
 
   my $self = bless [
     [],          # FRAMING_BUFFER
@@ -31,9 +31,9 @@ sub new {
     0,          # CHUNK_SIZE
     '',          # CHUNK_BUFFER
     undef,      # TRAILER_HEADERS
-  ], $type;
+  ], $class;
 
-  $self;
+  return $self;
 }
 
 my $HEX = qr/[\dA-Fa-f]/o;
@@ -127,7 +127,8 @@ sub get_one {
       my $len = $self->[CHUNK_SIZE] - length ($self->[CHUNK_BUFFER]);
       DEBUG and
         warn "going for length ", $self->[CHUNK_SIZE], " (need $len more)";
-      my $newchunk = delete $self->[CHUNK_BUFFER];
+      my $newchunk = $self->[CHUNK_BUFFER];
+      $self->[CHUNK_BUFFER] = "";
       $newchunk .= substr ($chunk, 0, $len, '');
       #warn "got " . length($newchunk) . " bytes of data";
       if (length $newchunk != $self->[CHUNK_SIZE]) {
@@ -185,3 +186,88 @@ sub get_pending {
   return $self->[FRAMING_BUFFER] if @{$self->[FRAMING_BUFFER]};
   return undef;
 }
+
+__END__
+
+# {{{ POD
+
+=head1 NAME
+
+POE::Filter::HTTPChunk - FIXME
+
+=head1 SYNOPSIS
+
+FIXME
+
+  use POE::Filter::HTTPChunk
+
+=head1 DESCRIPTION
+
+FIXME
+
+=head1 CONSTRUCTOR
+
+=head2 new
+
+POE::Filter::HTTPChunk's C<new> method takes a few named parameters:
+
+=head1 METHODS
+
+FIXME
+
+=head2 get_one_start
+
+FIXME
+
+=head2 get_one
+
+FIXME
+
+=head2 get_pending
+
+FIXME
+
+=head1 SEE ALSO
+
+FIXME
+
+=head1 BUGS
+
+FIXME
+
+=head1 AUTHOR & COPYRIGHTS
+
+FIXME
+
+POE::Filter::HTTPChunk is
+
+=over 2
+
+=item
+
+Copyright 1999-2006 Rocco Caputo
+
+=back
+
+All rights are reserved.  POE::Filter::HTTPChunk is free
+software; you may redistribute it and/or modify it under the same
+terms as Perl itself.
+
+=head1 CONTRIBUTORS
+
+FIXME
+
+=head1 CONTACT
+
+Rocco may be contacted by e-mail via L<mailto:rcaputo@cpan.org>, and
+Martijn may be contacted by email via L<mailto:martijn@cpan.org>.
+
+The preferred way to report bugs or requests is through RT though.
+See L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=POE-Filter-HTTPChunk>
+or mail L<mailto:bug-POE-Filter-HTTPChunk@rt.cpan.org>
+
+For questions, try the L<POE> mailing list (poe@perl.org)
+
+=cut
+
+# }}} POD

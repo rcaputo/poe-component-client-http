@@ -8,21 +8,20 @@ use Carp;
 use POE::Component::Client::HTTP::Request;
 use POE::Component::Client::HTTP;
 
-sub FCT_AGENT           () {  0 }
-sub FCT_STREAMING       () {  1 }
-sub FCT_MAXSIZE         () {  2 }
-sub FCT_PROTOCOL        () {  3 }
-sub FCT_COOKIEJAR       () {  4 }
-sub FCT_FROM            () {  5 }
-sub FCT_NOPROXY         () {  6 }
-sub FCT_HTTP_PROXY      () {  7 }
-sub FCT_FOLLOWREDIRECTS () {  8 }
-sub FCT_TIMEOUT         () {  9 }
+use constant FCT_AGENT           => 0;
+use constant FCT_STREAMING       => 1;
+use constant FCT_MAXSIZE         => 2;
+use constant FCT_PROTOCOL        => 3;
+use constant FCT_COOKIEJAR       => 4;
+use constant FCT_FROM            => 5;
+use constant FCT_NOPROXY         => 6;
+use constant FCT_HTTP_PROXY      => 7;
+use constant FCT_FOLLOWREDIRECTS => 8;
+use constant FCT_TIMEOUT         => 9;
+use constant DEBUG               => 0;
+use constant DEFAULT_BLOCK_SIZE  => 4096;
 
 our $VERSION = "0.01";
-sub DEBUG () { 0 }
-
-sub DEFAULT_BLOCK_SIZE () { 4096 }
 
 =head1 CONSTRUCTOR
 
@@ -186,7 +185,7 @@ sub is_streaming {
   return $self->[FCT_STREAMING];
 }
 
-=head2
+=head2 agent
 
 Accessor to the Agent parameter
 
@@ -198,7 +197,7 @@ sub agent {
   return $self->[FCT_AGENT]->[rand @{$self->[FCT_AGENT]}];
 }
 
-=head2
+=head2 from
 
 getter/setter for the From parameter
 
