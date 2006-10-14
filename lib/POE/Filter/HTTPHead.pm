@@ -145,7 +145,8 @@ use POE::Filter::Line;
 
 =head2 new
 
-FIXME
+Creates a new filter to parse HTTP headers.  Takes no parameters, and
+returns a shiny new POE::Filter::HTTPHead object.
 
 =cut
 
@@ -168,7 +169,10 @@ See L<POE::Filter> for documentation of the public API.
 
 =head2 get_pending
 
-FIXME
+Returns unparsed data pending in this filter's input buffer.  It's
+used by POE::Wheel objects to seamlessly switch between filters.
+
+Details may be found in the POE::Filter documentation.
 
 =cut
 

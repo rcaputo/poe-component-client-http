@@ -193,69 +193,90 @@ __END__
 
 =head1 NAME
 
-POE::Filter::HTTPChunk - FIXME
+POE::Filter::HTTPChunk - Non-blocking incremental HTTP chunk parser.
 
 =head1 SYNOPSIS
 
-FIXME
-
-  use POE::Filter::HTTPChunk
+  # Not a complete program.
+  use POE::Filter::HTTPChunk;
+  use POE::Wheel::ReadWrite;
+  sub setup_io {
+    $_[HEAP]->{io_wheel} = POE::Wheel::ReadWrite->new(
+      Filter => POE::Filter::HTTPChunk->new(),
+      # See POE::Wheel::ReadWrite for other required parameters.
+    );
+  }
 
 =head1 DESCRIPTION
 
-FIXME
+This filter parses HTTP chunks from a data stream.  It's used by
+POE::Component::Client::HTTP to do the bulk of the low-level HTTP
+parsing.
 
 =head1 CONSTRUCTOR
 
 =head2 new
 
-POE::Filter::HTTPChunk's C<new> method takes a few named parameters:
+C<new> takes no parameters and returns a shiny new
+POE::Filter::HTTPChunk object ready to use.
 
 =head1 METHODS
 
-FIXME
+POE::Filter::HTTPChunk supports the following methods.  Most of them
+adhere to the standard POE::Filter API.  The documentation for
+POE::Filter explains the API in more detail.
 
-=head2 get_one_start
+=head2 get_one_start ARRAYREF
 
-FIXME
+Accept an arrayref containing zero or more raw data chunks.  They are
+added to the filter's input buffer.  The filter will attempt to parse
+that data when get_one() is called.
+
+  $filter_httpchunk->get_one_start(\@stream_data);
 
 =head2 get_one
 
-FIXME
+Parse a single HTTP chunk from the filter's input buffer.  Data is
+entered into the buffer by the get_one_start() method.  Returns an
+arrayref containing zero or one parsed HTTP chunk.
+
+  $ret_arrayref = $filter_httpchunk->get_one();
 
 =head2 get_pending
 
-FIXME
+Returns an arrayref of stream data currently pending parsing.  It's
+used to seamlessly transfer unparsed data between an old and a new
+filter when a wheel's filter is changed.
+
+  $pending_arrayref = $filter_httpchunk->get_pending();
 
 =head1 SEE ALSO
 
-FIXME
+L<POE::Filter>, L<POE>.
 
 =head1 BUGS
 
-FIXME
+None are known at this time.
 
 =head1 AUTHOR & COPYRIGHTS
 
-FIXME
-
-POE::Filter::HTTPChunk is
+POE::Filter::HTTPChunk is...
 
 =over 2
 
 =item
 
-Copyright 1999-2006 Rocco Caputo
+Copyright 2005-2006 Martijn van Beers
+
+=item
+
+Copyright 2006 Rocco Caputo
 
 =back
 
-All rights are reserved.  POE::Filter::HTTPChunk is free
-software; you may redistribute it and/or modify it under the same
-terms as Perl itself.
-
-=head1 CONTRIBUTORS
-
-FIXME
+All rights are reserved.  POE::Filter::HTTPChunk is free software; you
+may redistribute it and/or modify it under the same terms as Perl
+itself.
 
 =head1 CONTACT
 
@@ -263,8 +284,9 @@ Rocco may be contacted by e-mail via L<mailto:rcaputo@cpan.org>, and
 Martijn may be contacted by email via L<mailto:martijn@cpan.org>.
 
 The preferred way to report bugs or requests is through RT though.
-See L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=POE-Filter-HTTPChunk>
-or mail L<mailto:bug-POE-Filter-HTTPChunk@rt.cpan.org>
+See
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=POE-Component-Client-HTTP>
+or mail L<mailto:bug-POE-Component-Client-HTTP@rt.cpan.org>
 
 For questions, try the L<POE> mailing list (poe@perl.org)
 

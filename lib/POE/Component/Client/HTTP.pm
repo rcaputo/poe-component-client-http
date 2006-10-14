@@ -1233,6 +1233,9 @@ terms as Perl itself.
 Joel Bernstein solved some nasty race conditions.  Portugal Telecom
 L<http://www.sapo.pt/> was kind enough to support his contributions.
 
+Jeff Bisbee added POD tests and documentation to pass several of them
+to version 0.79.  He's a kwalitee-increasing machine!
+
 =head1 CONTACT
 
 Rocco may be contacted by e-mail via L<mailto:rcaputo@cpan.org>, and
