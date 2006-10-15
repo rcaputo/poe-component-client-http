@@ -2,6 +2,7 @@
 CHANGES
 CHANGES.OLD
 MANIFEST
+META.yml
 Makefile.PL
 README
 examples/pcchget.perl
