@@ -12,34 +12,33 @@ use HTTP::Status;
 # Unique request ID, independent of wheel and timer IDs.
 my $request_seq = 0;
 
-sub DEBUG () { 0 }
+use constant DEBUG => 0;
 
-sub REQ_ID            () {  0 }
-sub REQ_POSTBACK      () {  1 }
-sub REQ_CONNECTION    () {  2 }
-sub REQ_REQUEST       () {  3 }
-sub REQ_STATE         () {  4 }
-sub REQ_RESPONSE      () {  5 }
-sub REQ_BUFFER        () {  6 }
+use constant REQ_ID            =>  0;
+use constant REQ_POSTBACK      =>  1;
+use constant REQ_CONNECTION    =>  2;
+use constant REQ_REQUEST       =>  3;
+use constant REQ_STATE         =>  4;
+use constant REQ_RESPONSE      =>  5;
+use constant REQ_BUFFER        =>  6;
+use constant REQ_OCTETS_GOT    =>  8;
+use constant REQ_TIMER         =>  9;
+use constant REQ_PROG_POSTBACK => 10;
+use constant REQ_USING_PROXY   => 11;
+use constant REQ_HOST          => 12;
+use constant REQ_PORT          => 13;
+use constant REQ_HISTORY       => 14;
+use constant REQ_START_TIME    => 15;
+use constant REQ_FACTORY       => 16;
+use constant REQ_CONN_ID       => 17;
 
-sub REQ_OCTETS_GOT    () {  8 }
-sub REQ_TIMER         () {  9 }
-sub REQ_PROG_POSTBACK () { 10 }
-sub REQ_USING_PROXY   () { 11 }
-sub REQ_HOST          () { 12 }
-sub REQ_PORT          () { 13 }
-sub REQ_HISTORY       () { 14 }
-sub REQ_START_TIME    () { 15 }
-sub REQ_FACTORY       () { 16 }
-sub REQ_CONN_ID       () { 17 }
-
-sub RS_CONNECT      () { 0x01 }
-sub RS_SENDING      () { 0x02 }
-sub RS_IN_HEAD      () { 0x04 }
-sub RS_REDIRECTED   () { 0x08 }
-sub RS_IN_CONTENT   () { 0x20 }
-sub RS_DONE         () { 0x40 }
-sub RS_POSTED       () { 0x80 }
+use constant RS_CONNECT        => 0x01;
+use constant RS_SENDING        => 0x02;
+use constant RS_IN_HEAD        => 0x04;
+use constant RS_REDIRECTED     => 0x08;
+use constant RS_IN_CONTENT     => 0x20;
+use constant RS_DONE           => 0x40;
+use constant RS_POSTED         => 0x80;
 
 
 sub import {
@@ -600,6 +599,8 @@ events.  Optional.
 
 Sets the proxy used for this request, if requested by the user.
 Optional.
+
+=back
 
 =head1 METHODS
 
