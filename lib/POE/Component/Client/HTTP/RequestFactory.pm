@@ -30,7 +30,8 @@ our $VERSION = "0.01";
 Create a new request factory object. It expects its parameters in a
 hashref.
 
-The following parameters are accepted.
+The following parameters are accepted.  They are explained in detail
+in L<POE::Component::Client::HTTP>.
 
 =over 4
 
@@ -75,8 +76,6 @@ FollowRedirects
 Timeout
 
 =back
-
-An explanation for these is in L<POE::Component::Client::HTTP>
 
 =cut
 
