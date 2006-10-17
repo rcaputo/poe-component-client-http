@@ -448,7 +448,16 @@ sub _poco_weeble_io_error {
     }
 
     # We haven't built a proper response.  Send back an error.
-    $request->error (400, "incomplete response $request_id");
+    # Changed to 406 after considering rt.cpan.org 20975.
+    #
+    # 10.4.7 406 Not Acceptable
+    #
+    # The resource identified by the request is only capable of
+    # generating response entities which have content characteristics
+    # not acceptable according to the accept headers sent in the
+    # request.
+
+    $request->error (406, "Response larger than MaxSize - $request_id");
   }
 }
 
