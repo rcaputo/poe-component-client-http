@@ -195,7 +195,7 @@ sub add_eof {
 
   unless (defined $self->[REQ_RESPONSE]) {
     # XXX I don't know if this is actually used
-    $self->error(400, "incomplete response " . $self->[REQ_ID]);
+    $self->error(400, "incomplete response a " . $self->[REQ_ID]);
     return;
   }
 
@@ -218,7 +218,12 @@ sub add_eof {
       "got " . $self->[REQ_OCTETS_GOT] . " of " .
       $self->[REQ_RESPONSE]->content_length
     );
-    $self->error(400, "incomplete response " . $self->[REQ_ID]);
+    $self->error(
+      400,
+      "incomplete response b " . $self->[REQ_ID] . ".  Wanted " .
+      $self->[REQ_RESPONSE]->content_length() . " octets.  Got " .
+      $self->[REQ_OCTETS_GOT] . "."
+    );
   }
   else {
     $self->[REQ_STATE] |= RS_DONE;
@@ -484,11 +489,14 @@ sub send_to_wheel {
 sub wheel {
   my ($self) = @_;
 
+  # FIXME - We don't support older versions of POE.  Remove this chunk
+  # of code when we're not fixing something else.
+  #
   #if (defined $new_wheel) {
-    # Switch wheels.  This is cumbersome, but it works around a bug in
-    # older versions of POE.
-    #$self->[REQ_WHEEL] = undef;
-    #$self->[REQ_WHEEL] = $new_wheel;
+  #   Switch wheels.  This is cumbersome, but it works around a bug in
+  #   older versions of POE.
+  #  $self->[REQ_WHEEL] = undef;
+  #  $self->[REQ_WHEEL] = $new_wheel;
   #}
 
   return unless $self->[REQ_CONNECTION];

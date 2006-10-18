@@ -55,7 +55,7 @@ sub get_one {
       }
       else {
         # assume HTTP/0.9
-        my $resp = HTTP::Response->new ('200', 'OK', 
+        my $resp = HTTP::Response->new ('200', 'OK',
                     ['Content-Type' => 'text/html'], $line );
         $resp->protocol('HTTP/0.9');
         return [ $resp ];

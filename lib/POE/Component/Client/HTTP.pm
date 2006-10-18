@@ -35,8 +35,37 @@ use POE qw(
   Component::Client::Keepalive
 );
 
-my %te_filters = (
-  chunked => 'POE::Filter::HTTPChunk',
+# The Internet Assigned Numbers Authority (IANA) acts as a registry
+# for transfer-coding value tokens. Initially, the registry contains
+# the following tokens: "chunked" (section 3.6.1), "identity" (section
+# 3.6.2), "gzip" (section 3.5), "compress" (section 3.5), and
+# "deflate" (section 3.5).
+
+# FIXME - Haven't been able to test the compression options.
+
+my %te_possible_filters = (
+  chunked  => 'POE::Filter::HTTPChunk',
+  identity => 'POE::Filter::Stream',
+#  gzip     => 'POE::Filter::Zlib::Stream',
+#  gzip     => 'POE::Filter::LZW',
+#  compress => 'POE::Filter::LZW',
+#  deflate  => 'POE::Filter::Zlib::Stream',
+);
+
+my %te_filters;
+
+while (my ($encoding, $filter) = each %te_possible_filters) {
+  eval "use $filter";
+  next if $@;
+  $te_filters{$encoding} = $filter;
+}
+
+# Done this way so they appear in order of preference.
+# FIXME - Is the order important here?
+my $accept_encoding = join(
+  ",",
+  grep { exists $te_filters{$_} }
+  qw(gzip deflate compress chunked identity)
 );
 
 my %supported_schemes = (
@@ -194,6 +223,14 @@ sub _poco_weeble_request {
 
   if (defined $proxy_override) {
     POE::Component::Client::HTTP::RequestFactory->parse_proxy($proxy_override);
+  }
+
+  # Add an Accept-Encoding header if we don't have one.
+  if (
+    !defined($http_request->header('Accept-Encoding')) and
+    length($accept_encoding)
+  ) {
+    $http_request->header('Accept-Encoding', $accept_encoding);
   }
 
   my $request = $heap->{factory}->create_request(
@@ -566,6 +603,8 @@ sub _poco_weeble_io_read {
 
       my ($filter, @filters);
 
+      # Transfer encoding.
+
       my $te = $input->header('Transfer-Encoding');
       if (defined $te) {
         my @te = split(/\s*,\s*/, lc($te));
@@ -584,6 +623,26 @@ sub _poco_weeble_io_read {
         }
       }
 
+      # Content encoding.
+
+      my $ce = $input->header('Content-Encoding');
+      if (defined $ce) {
+        my @ce = split(/\s*,\s*/, lc($ce));
+
+        while (@ce and exists $te_filters{$ce[-1]}) {
+          my $encoding = pop @ce;
+          my $fclass = $te_filters{$encoding};
+          push @filters, $fclass->new();
+        }
+
+        if (@ce) {
+          $input->header('Content-Encoding', join(', ', @ce));
+        }
+        else {
+          $input->header('Content-Encoding', undef);
+        }
+      }
+
       if (@filters > 1) {
         $filter = POE::Filter::Stackable->new( Filters => \@filters );
       }
@@ -591,6 +650,7 @@ sub _poco_weeble_io_read {
         $filter = $filters[0];
       }
       else {
+        # Punt if we have no specified filters.
         $filter = POE::Filter::Stream->new;
       }
 
