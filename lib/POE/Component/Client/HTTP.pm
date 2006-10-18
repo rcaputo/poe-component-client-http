@@ -42,14 +42,22 @@ use POE qw(
 # "deflate" (section 3.5).
 
 # FIXME - Haven't been able to test the compression options.
+# Comments for each filter are what HTTP::Message use.  Methods
+# without packages are from Compress::Zlib.
+
+# FIXME - Is it okay to be mixing content and transfer encodings in
+# this one table?
 
 my %te_possible_filters = (
-  chunked  => 'POE::Filter::HTTPChunk',
-  identity => 'POE::Filter::Stream',
-#  gzip     => 'POE::Filter::Zlib::Stream',
-#  gzip     => 'POE::Filter::LZW',
-#  compress => 'POE::Filter::LZW',
-#  deflate  => 'POE::Filter::Zlib::Stream',
+  'chunked'  => 'POE::Filter::HTTPChunk',
+  'identity' => 'POE::Filter::Stream',
+#  'gzip'     => 'POE::Filter::Zlib::Stream',  # Zlib: memGunzip
+#  'x-gzip'   => 'POE::Filter::Zlib::Stream',  # Zlib: memGunzip
+#	'x-bzip2'  => 'POE::Filter::Bzip2',         # Compress::BZip2::decompress
+#  'deflate'  => 'POE::Filter::Zlib::Stream',  # Zlib: uncompress / inflate
+#  'compress' => 'POE::Filter::LZW',           # unsupported
+	# FIXME - base64 = MIME::Base64::decode
+	# FIXME - quoted-printable = Mime::QuotedPrint::decode
 );
 
 my %te_filters;
@@ -65,7 +73,7 @@ while (my ($encoding, $filter) = each %te_possible_filters) {
 my $accept_encoding = join(
   ",",
   grep { exists $te_filters{$_} }
-  qw(gzip deflate compress chunked identity)
+  qw(x-bzip2 gzip x-gzip deflate compress chunked identity)
 );
 
 my %supported_schemes = (
