@@ -24,6 +24,7 @@ t/10_shutdown.t
 t/11_cancel.t
 t/12_pod.t
 t/13_pod_coverage.t
+t/14_gzipped_content.t
 t/50_davis_zerolength.t
 t/51_santos_status.t
 t/52_reiss_bad_length.t
@@ -32,3 +33,4 @@ t/54_hzheng_head_redir.t
 t/55_reiss_double_resp.t
 t/56_redirect_excess.t
 t/57_joel_immed_cancel.t
+t/58_joel_cancel_multi.t

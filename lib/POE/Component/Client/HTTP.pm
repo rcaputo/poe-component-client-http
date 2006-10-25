@@ -15,6 +15,7 @@ $VERSION = '0.79';
 
 use Carp qw(croak);
 use HTTP::Response;
+use Net::HTTP::Methods;
 
 use POE::Component::Client::HTTP::RequestFactory;
 use POE::Component::Client::HTTP::Request qw(:states :fields);
@@ -53,11 +54,11 @@ my %te_possible_filters = (
   'identity' => 'POE::Filter::Stream',
 #  'gzip'     => 'POE::Filter::Zlib::Stream',  # Zlib: memGunzip
 #  'x-gzip'   => 'POE::Filter::Zlib::Stream',  # Zlib: memGunzip
-#	'x-bzip2'  => 'POE::Filter::Bzip2',         # Compress::BZip2::decompress
+#  'x-bzip2'  => 'POE::Filter::Bzip2',         # Compress::BZip2::decompress
 #  'deflate'  => 'POE::Filter::Zlib::Stream',  # Zlib: uncompress / inflate
 #  'compress' => 'POE::Filter::LZW',           # unsupported
-	# FIXME - base64 = MIME::Base64::decode
-	# FIXME - quoted-printable = Mime::QuotedPrint::decode
+  # FIXME - base64 = MIME::Base64::decode
+  # FIXME - quoted-printable = Mime::QuotedPrint::decode
 );
 
 my %te_filters;
@@ -68,13 +69,25 @@ while (my ($encoding, $filter) = each %te_possible_filters) {
   $te_filters{$encoding} = $filter;
 }
 
+# The following defaults to 'chunked,identity' which is technically
+# correct but arguably useless.  It also stomps on gzip'd transport
+# because in the World Wild Web, Accept-Encoding is used to indicate
+# gzip readiness, but the server responds with 'Content-Encoding:
+# gzip', completely outside of TE encoding.
+#
 # Done this way so they appear in order of preference.
 # FIXME - Is the order important here?
-my $accept_encoding = join(
-  ",",
-  grep { exists $te_filters{$_} }
-  qw(x-bzip2 gzip x-gzip deflate compress chunked identity)
-);
+
+#my $accept_encoding = join(
+#  ",",
+#  grep { exists $te_filters{$_} }
+#  qw(x-bzip2 gzip x-gzip deflate compress chunked identity)
+#);
+
+# Set default accept encoding here, but DON'T SET later, if the
+# request is streaming.
+
+my $accept_encoding = Net::HTTP::Methods::zlib_ok() ? 'gzip' : '';
 
 my %supported_schemes = (
   http  => 1,
@@ -233,8 +246,10 @@ sub _poco_weeble_request {
     POE::Component::Client::HTTP::RequestFactory->parse_proxy($proxy_override);
   }
 
-  # Add an Accept-Encoding header if we don't have one.
+  # Add an Accept-Encoding header if streaming is not enabled and the
+  # header doesn't already exist.
   if (
+    !$heap->{factory}->is_streaming and
     !defined($http_request->header('Accept-Encoding')) and
     length($accept_encoding)
   ) {

@@ -9,10 +9,11 @@ use ExtUtils::MakeMaker;
 open(CHANGES, ">>CHANGES") and close CHANGES;
 
 my %prereq = (
-  'POE'             => 0.3202,
-  'HTTP::Request'   => 1.30,
-  'HTTP::Response'  => 1.37,
-  'URI'             => 1.24,
+  'POE'                => 0.3202,
+  'HTTP::Request'      => 1.30,
+  'HTTP::Response'     => 1.37,
+  'URI'                => 1.24,
+  'Net::HTTP::Methods' => 0.02,
   'POE::Component::Client::Keepalive' => 0.09,
 );
 
