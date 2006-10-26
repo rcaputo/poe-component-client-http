@@ -250,6 +250,7 @@ sub _poco_weeble_request {
   # header doesn't already exist.
   if (
     !$heap->{factory}->is_streaming and
+    !$heap->{factory}->max_response_size and # or for limited chunk sizes
     !defined($http_request->header('Accept-Encoding')) and
     length($accept_encoding)
   ) {
