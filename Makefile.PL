@@ -22,6 +22,7 @@ WriteMakefile(
   NAME         => 'POE::Component::Client::HTTP',
   AUTHOR       => 'Rocco Caputo <rcaputo@cpan.org>',
   ABSTRACT     => 'Non-blocking/concurrent HTTP queries with POE',
+  LICENSE      => 'perl',
   VERSION_FROM => 'lib/POE/Component/Client/HTTP.pm',
   PREREQ_PM    => \%prereq,
   dist         => {
