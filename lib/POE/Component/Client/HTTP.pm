@@ -1297,7 +1297,7 @@ There is no object oriented interface.  See
 L<POE::Component::Client::Keepalive> and
 L<POE::Component::Client::DNS> for examples of a decent OO interface.
 
-=head1 AUTHOR & COPYRIGHTS
+=head1 AUTHOR, COPYRIGHT, & LICENSE 
 
 POE::Component::Client::HTTP is
 
