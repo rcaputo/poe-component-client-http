@@ -204,7 +204,11 @@ sub client_got_response {
       ok(1, 'request 4') if $request_path =~ m/projects\/poe/;
       ok(1, 'callback-based upload') if $response_string =~ /callback/;
     }
-    elsif ($http_response->code == 500 or $http_response->code == 502) {
+    elsif (
+      $http_response->code == 500 or
+      $http_response->code == 502 or
+      $http_response->code == 302
+    ) {
       pass("request 6");
       # The next test assumes a particular responding server.
       # It's bogus is proxying is enabled through the environment.
