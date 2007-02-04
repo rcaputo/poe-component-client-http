@@ -58,15 +58,15 @@ sub client_start {
       ),
     ),
   );
-  
+
   # Test callback in content()
   my @chunks = (
     'cgi_field_one=ZZZ&',
     'cgi_field_two=YYY&',
-    'cgi_field_six=XXX',
+    'cgi_field_svn=XXX',
   );
-  
-  my $request = HTTP::Request->new( 
+
+  my $request = HTTP::Request->new(
     POST => 'http://poe.perl.org/misc/test.cgi',
     [
       Content_Type   => 'application/x-www-form-urlencoded',
@@ -74,7 +74,7 @@ sub client_start {
     ],
     sub { return shift @chunks },
   );
-  
+
   $kernel->post(
     weeble => request => got_response => $request
   );
