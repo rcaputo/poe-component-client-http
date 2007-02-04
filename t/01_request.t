@@ -146,10 +146,10 @@ sub client_start {
   );
 
   if ($has_sslify) {
-    $kernel->yield( check_counts => 8 );
+    $kernel->yield( check_counts => 9 );
   }
   else {
-    $kernel->yield( check_counts => 7 );
+    $kernel->yield( check_counts => 8 );
   }
 }
 
