@@ -18,11 +18,11 @@ sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
 my ($tests, $has_sslify);
 BEGIN {
   if (grep /SSLify/, keys %INC) {
-    $tests = 14;
+    $tests = 15;
     $has_sslify = 1;
   }
   else {
-    $tests = 13;
+    $tests = 14;
   }
 }
 
@@ -57,6 +57,26 @@ sub client_start {
         ] # , Connection => 'close',
       ),
     ),
+  );
+  
+  # Test callback in content()
+  my @chunks = (
+    'cgi_field_one=ZZZ&',
+    'cgi_field_two=YYY&',
+    'cgi_field_six=XXX',
+  );
+  
+  my $request = HTTP::Request->new( 
+    POST => 'http://poe.perl.org/misc/test.cgi',
+    [
+      Content_Type   => 'application/x-www-form-urlencoded',
+      Content_Length => 53,
+    ],
+    sub { return shift @chunks },
+  );
+  
+  $kernel->post(
+    weeble => request => got_response => $request
   );
 
   $kernel->post(
@@ -182,6 +202,7 @@ sub client_got_response {
       ok(1, 'request 3') if $response_string =~ /cgi_field_fiv/;
       ok(1, 'request 5') if $request_path eq '';
       ok(1, 'request 4') if $request_path =~ m/projects\/poe/;
+      ok(1, 'callback-based upload') if $response_string =~ /XXX/;
     }
     elsif ($http_response->code == 500 or $http_response->code == 502) {
       pass("request 6");

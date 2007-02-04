@@ -480,9 +480,12 @@ sub send_to_wheel {
     $http_request->method() . ' ' .
     $request_uri . ' ' .
     $http_request->protocol() . "\x0D\x0A" .
-    $http_request->headers_as_string("\x0D\x0A") . "\x0D\x0A" .
-    $http_request->content() # . "\x0D\x0A"
+    $http_request->headers_as_string("\x0D\x0A") . "\x0D\x0A"
   );
+  
+  if ( !ref $http_request->content() ) {
+    $request_string .= $http_request->content(); # . "\x0D\x0A"
+  }    
 
   DEBUG and do {
     my $formatted_request_string = $request_string;
