@@ -61,16 +61,16 @@ sub client_start {
 
   # Test callback in content()
   my @chunks = (
-    'cgi_field_one=ZZZ&',
-    'cgi_field_two=YYY&',
-    'cgi_field_svn=XXX',
+    'callback_one=ZZZ&',
+    'callback_two=YYY&',
+    'callback_three=XXX',
   );
 
   my $request = HTTP::Request->new(
     POST => 'http://poe.perl.org/misc/test.cgi',
     [
       Content_Type   => 'application/x-www-form-urlencoded',
-      Content_Length => 53,
+      Content_Length => 52,
     ],
     sub { return shift @chunks },
   );
@@ -202,7 +202,7 @@ sub client_got_response {
       ok(1, 'request 3') if $response_string =~ /cgi_field_fiv/;
       ok(1, 'request 5') if $request_path eq '';
       ok(1, 'request 4') if $request_path =~ m/projects\/poe/;
-      ok(1, 'callback-based upload') if $response_string =~ /XXX/;
+      ok(1, 'callback-based upload') if $response_string =~ /callback/;
     }
     elsif ($http_response->code == 500 or $http_response->code == 502) {
       pass("request 6");
