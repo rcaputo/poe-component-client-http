@@ -208,7 +208,7 @@ sub client_got_response {
       $http_response->code == 500 or
       $http_response->code == 502 or
       $http_response->code == 302 or
-			$http_response->code == 503
+      $http_response->code == 503
     ) {
       pass("request 6");
       # The next test assumes a particular responding server.
