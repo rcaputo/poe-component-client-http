@@ -209,7 +209,13 @@ sub _poco_weeble_request {
     $proxy_override
   ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1, ARG2, ARG3, ARG4];
 
-  unless ($supported_schemes{$http_request->uri->scheme}) {
+  unless (
+    defined($http_request->uri->scheme) and
+    length($http_request->uri->scheme) and
+    $supported_schemes{$http_request->uri->scheme} and
+    defined($http_request->uri->host) and
+    length($http_request->uri->host)
+  ) {
     my $rsp = HTTP::Response->new(
        400 => 'Bad Request', [],
        "<html>\n"
