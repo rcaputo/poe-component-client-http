@@ -722,7 +722,7 @@ POE::Component::Client::HTTP::Request is
 
 =item
 
-Copyright 2004-2005 Martijn van Beerl
+Copyright 2004-2005 Martijn van Beers
 
 =item
 
