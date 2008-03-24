@@ -448,6 +448,11 @@ sub check_redirect {
   }
   else { # All fine, yield new request and mark this disabled.
     my $newrequest = $self->[REQ_REQUEST]->clone();
+
+    # Sanitize new request per rt #30400.
+    # TODO - What other headers are security risks?
+    $newrequest->remove_header('Cookie');
+
     DEBUG and warn "RED: new request $newrequest";
     $newrequest->uri($new_uri);
     _set_host_header ($newrequest);
