@@ -439,9 +439,7 @@ sub check_redirect {
   my $prev = $self;
   my $history = 0;
   while ($prev = $prev->[REQ_HISTORY]) {
-    $history++;
-    $history = $max + 1 if ($prev->[REQ_REQUEST]->uri eq $new_uri);
-    last if ($history > $max);
+    last if ++$history > $max;
   }
 
   if ($history >= $max) {
