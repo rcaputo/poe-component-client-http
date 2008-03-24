@@ -427,6 +427,9 @@ sub check_redirect {
 
   return undef unless ($self->[REQ_RESPONSE]->is_redirect);
 
+  # Make sure to frob any cookies set.  Redirect cookies are cookies, too!
+  $self->[REQ_FACTORY]->frob_cookies($self->[REQ_RESPONSE]);
+
   my $new_uri = $self->[REQ_RESPONSE]->header ('Location');
   DEBUG and warn "REQ: Preparing redirect to $new_uri";
   my $base = $self->[REQ_RESPONSE]->base();
