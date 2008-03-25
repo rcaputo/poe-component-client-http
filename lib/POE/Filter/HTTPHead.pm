@@ -87,7 +87,7 @@ sub get_one {
         $
         }x
       ) {
-        $self->[WORK_RESPONSE]->header($1, $2)
+        $self->[WORK_RESPONSE]->push_header($1, $2)
       }
     }
   }
