@@ -9,6 +9,16 @@ use POE;
 use Carp;
 use HTTP::Status;
 
+BEGIN {
+  local $SIG{'__DIE__'} = 'DEFAULT';
+  # Allow more finely grained timeouts if Time::HiRes is available.
+  # This code is also in POE::Component::Client::HTTP
+  eval {
+    require Time::HiRes;
+    Time::HiRes->import("time");
+  };
+}
+
 # Unique request ID, independent of wheel and timer IDs.
 my $request_seq = 0;
 
