@@ -531,6 +531,11 @@ sub _poco_weeble_io_error {
         $request->[REQ_STATE] = RS_DONE;
         $request->return_response;
         return;
+      } else {
+        unless ($request->[REQ_STATE] & RS_POSTED) {
+          $request->error(400, "incomplete response $request_id");
+          return;
+        }
       }
     }
 

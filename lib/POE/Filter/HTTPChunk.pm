@@ -26,10 +26,10 @@ sub new {
   my ($class) = @_;
 
   my $self = bless [
-    [],          # FRAMING_BUFFER
+    [],         # FRAMING_BUFFER
     STATE_SIZE, # CURRENT_STATE
     0,          # CHUNK_SIZE
-    '',          # CHUNK_BUFFER
+    '',         # CHUNK_BUFFER
     undef,      # TRAILER_HEADERS
   ], $class;
 
