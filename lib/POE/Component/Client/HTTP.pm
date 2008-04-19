@@ -225,9 +225,13 @@ sub _poco_weeble_request {
        . "Unsupported URI scheme\n"
        . "</BODY>\n"
        . "</HTML>\n"
-      );
+		);
     $rsp->request($http_request);
-    $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
+    if (ref $response_event) {
+      $response_event->postback->($rsp);
+    } else {
+      $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
+    }
     return;
   }
 
@@ -244,7 +248,11 @@ sub _poco_weeble_request {
        . "</HTML>\n"
       );
     $rsp->request($http_request);
-    $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
+    if (ref $response_event) {
+      $response_event->postback->($rsp);
+    } else {
+      $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
+    }
     return;
   }
 
