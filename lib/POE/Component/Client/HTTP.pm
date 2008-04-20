@@ -113,6 +113,7 @@ sub spawn {
   my $alias = delete $params{Alias};
   $alias = 'weeble' unless defined $alias and length $alias;
 
+  my $bind_addr = delete $params{BindAddr};
   my $cm = delete $params{ConnectionManager};
 
   my $request_factory = POE::Component::Client::HTTP::RequestFactory->new(
@@ -153,6 +154,7 @@ sub spawn {
       factory      => $request_factory,
       cm           => $cm,
       is_shut_down => 0,
+      bind_addr    => $bind_addr,
     },
   );
 
@@ -171,6 +173,7 @@ sub _poco_weeble_start {
   # have to do this here because it wants a current_session
   $heap->{cm} = POE::Component::Client::Keepalive->new(
     timeout => $heap->{factory}->timeout,
+    $heap->{bind_addr} ? (bind_address => $heap->{bind_addr}) : (),
   ) unless ($heap->{cm});
 }
 
@@ -225,7 +228,7 @@ sub _poco_weeble_request {
        . "Unsupported URI scheme\n"
        . "</BODY>\n"
        . "</HTML>\n"
-		);
+    );
     $rsp->request($http_request);
     if (ref $response_event) {
       $response_event->postback->($rsp);
@@ -983,6 +986,7 @@ POE::Component::Client::HTTP - a HTTP user-agent component
     FollowRedirects => 2                # defaults to 0 (off)
     Proxy     => "http://localhost:80", # defaults to HTTP_PROXY env. variable
     NoProxy   => [ "localhost", "127.0.0.1" ], # defs to NO_PROXY env. variable
+    BindAddr  => "12.34.56.78",         # defaults to INADDR_ANY
   );
 
   $kernel->post(
@@ -1123,6 +1127,16 @@ NO_PROXY environment variable.
 
   NoProxy => [ "localhost", "127.0.0.1" ],
   NoProxy => "localhost,127.0.0.1",
+
+=item BindAddr => $local_ip
+
+Specify C<BindAddr> to bind all client sockets to a particular local
+address.  The value of BindAddr will be passed through
+POE::Component::Client::Keepalive to POE::Wheel::SocketFactory (as
+C<bind_address>).  See that module's documentation for implementation
+details.
+
+  BindAddr => "12.34.56.78"
 
 =item Protocol => $http_protocol_string
 
