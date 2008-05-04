@@ -181,10 +181,15 @@ sub return_response {
       "checking $response for content-encoding ", $self->[REQ_ID]
     );
     if ($response->header('content-encoding')) {
-      my $content;
       # LWP likes to die on error.
-      eval { $content = $response->decoded_content };
-      if ($content) { $response->content($content); }
+      my $content = eval {
+        $response->decoded_content(charset => 'none', ref => 1)
+      };
+      if ($content) {
+        $response->content_ref($content);
+        $response->content_length(length($$content));
+        $response->header('content-encoding' => undef);
+      }
     }
 
     DEBUG and warn "done; returning $response for ", $self->[REQ_ID];
@@ -498,10 +503,10 @@ sub send_to_wheel {
     $http_request->protocol() . "\x0D\x0A" .
     $http_request->headers_as_string("\x0D\x0A") . "\x0D\x0A"
   );
-  
+ 
   if ( !ref $http_request->content() ) {
     $request_string .= $http_request->content(); # . "\x0D\x0A"
-  }    
+  }
 
   DEBUG and do {
     my $formatted_request_string = $request_string;
