@@ -177,21 +177,6 @@ sub return_response {
   # if we are. that there's no ARG1 lets the client know we're done
   # with the content in the latter case
   if ($self->[REQ_STATE] & RS_DONE) {
-    DEBUG and warn(
-      "checking $response for content-encoding ", $self->[REQ_ID]
-    );
-    if ($response->header('content-encoding')) {
-      # LWP likes to die on error.
-      my $content = eval {
-        $response->decoded_content(charset => 'none', ref => 1)
-      };
-      if ($content) {
-        $response->content_ref($content);
-        $response->content_length(length($$content));
-        $response->header('content-encoding' => undef);
-      }
-    }
-
     DEBUG and warn "done; returning $response for ", $self->[REQ_ID];
     $self->[REQ_POSTBACK]->($self->[REQ_RESPONSE]);
     $self->[REQ_STATE] |= RS_POSTED;

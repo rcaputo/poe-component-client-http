@@ -108,7 +108,7 @@ my @tests = (
 
       ok(
         $response->code() == 200 &&
-        $response->content eq $original_content,
+        $response->decoded_content eq $original_content,
         "gzip encoded transfers decode correctly"
       );
     },

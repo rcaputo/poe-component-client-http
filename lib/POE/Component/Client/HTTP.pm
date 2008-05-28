@@ -11,7 +11,7 @@ use constant DEBUG      => 0;
 use constant DEBUG_DATA => 0;
 
 use vars qw($VERSION);
-$VERSION = '0.83';
+$VERSION = '0.84';
 
 use Carp qw(croak);
 use HTTP::Response;
@@ -83,11 +83,6 @@ while (my ($encoding, $filter) = each %te_possible_filters) {
 #  grep { exists $te_filters{$_} }
 #  qw(x-bzip2 gzip x-gzip deflate compress chunked identity)
 #);
-
-# Set default accept encoding here, but DON'T SET later, if the
-# request is streaming.
-
-my $accept_encoding = Net::HTTP::Methods::zlib_ok() ? 'gzip' : '';
 
 my %supported_schemes = (
   http  => 1,
@@ -261,17 +256,6 @@ sub _poco_weeble_request {
 
   if (defined $proxy_override) {
     POE::Component::Client::HTTP::RequestFactory->parse_proxy($proxy_override);
-  }
-
-  # Add an Accept-Encoding header if streaming is not enabled and the
-  # header doesn't already exist.
-  if (
-    !$heap->{factory}->is_streaming and
-    !$heap->{factory}->max_response_size and # or for limited chunk sizes
-    !defined($http_request->header('Accept-Encoding')) and
-    length($accept_encoding)
-  ) {
-    $http_request->header('Accept-Encoding', $accept_encoding);
   }
 
   my $request = $heap->{factory}->create_request(
@@ -1347,6 +1331,37 @@ to set the Content-Length header correctly.  Example:
   $request->content( $upload_cb );
   
   $kernel->post( ua => request, 'response', $request );
+
+=head1 CONTENT ENCODING AND COMPRESSION
+
+Transparent content decoding has been disabled as of version 0.84.
+This also removes support for transparent gzip requesting and
+decompression.
+
+To re-enable gzip compression, specify the gzip Content-Encoding and
+use HTTP::Response's decoded_content() method rather than content():
+
+  my $request = HTTP::Request->new(
+    GET => "http://www.yahoo.com/", [
+      'Accept-Encoding' => 'gzip'
+    ]
+  );
+
+  # ... time passes ...
+  
+  my $content = $response->decoded_content();
+
+The change in POE::Component::Client::HTTP behavior was prompted by
+changes in HTTP::Response that surfaced a bug in the component's
+transparent gzip handling.
+
+Allowing the application to specify and handle content encodings seems
+to be the most reliable and flexible resolution.
+
+For more information about the problem and discussions regarding the
+solution, see:
+L<http://www.perlmonks.org/?node_id=683833> and
+L<http://rt.cpan.org/Ticket/Display.html?id=35538>
 
 =head1 ENVIRONMENT
 
