@@ -7,7 +7,7 @@ use warnings;
 use IO::Handle;
 use Test::More;
 
-plan tests => 9;
+plan tests => 10;
 
 use_ok('POE::Filter::HTTPHead');
 
@@ -37,6 +37,9 @@ while ($_ = <DATA>) {
       is($data, shift @content, 'got the right content');
       #warn Dumper $data;
       $filter = POE::Filter::HTTPHead->new;
+    } elsif ($request_number == 1) {
+      my $data = $filter->get_pending;
+      cmp_ok(@$data, '==', 0, "Nothing left");
     }
     $state = 'head';
     $request_number++;
