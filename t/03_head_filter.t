@@ -1,87 +1,50 @@
 # $Id$
-# vim: filetype=perl
+# vim: filetype=perl ts=2 sw=2 tabexpand
 
 use strict;
 use warnings;
 
-use Test::More tests => 8;
-
-use POE qw(
-  Wheel::ReadWrite
-  Driver::SysRW
-  Filter::Line
-  Filter::Stream
-  Filter::HTTPHead
-);
-
-ok(defined $INC{"POE/Filter/HTTPHead.pm"}, "loaded");
-
 use IO::Handle;
-use IO::File;
+use Test::More;
+
+plan tests => 9;
+
+use_ok('POE::Filter::HTTPHead');
 
 autoflush STDOUT 1;
-my $request_number = 8;
+autoflush STDERR 1;
+my $request_number = 1;
 
-my $session = POE::Session->create(
-  inline_states => {
-    _start => \&start,
-    input => \&input,
-    error => \&error,
-    flushed => \&flushed,
-  },
-);
+my $filter = POE::Filter::HTTPHead->new;
 
-POE::Kernel->run();
-exit;
-
-sub start {
-  my ($kernel, $heap) = @_[KERNEL, HEAP];
-
-  sysseek(DATA, tell(DATA), 0);
-
-  my $filter = POE::Filter::HTTPHead->new;
-
-  my $wheel = POE::Wheel::ReadWrite->new (
-    Handle => \*DATA,
-    Driver => POE::Driver::SysRW->new (BlockSize => 1000),
-    InputFilter => $filter,
-    InputEvent => 'input',
-    ErrorEvent => 'error',
-  );
-  $heap->{'wheel'} = $wheel;
-}
-
-sub input {
-  my ($kernel, $heap, $data) = @_[KERNEL, HEAP, ARG0];
-  if ($heap->{wheel}->get_input_filter->isa('POE::Filter::Line')) {
-    $request_number == 2 and is($data, 'content', "Got content foo");
-    #$request_number == 1 and is($data, 'contents', "Got content bar");
-    $heap->{wheel}->set_input_filter(POE::Filter::HTTPHead->new);
+my @content = qw(content);
+my $state = 'head';
+while ($_ = <DATA>) {
+  #warn "($state) LINE: $_";
+  if (substr ($_, 0, 5)  eq '--end') {
+    my $data = $filter->get_one;
+    $data = $data->[0];
+    isa_ok($data, 'HTTP::Response');
+    #warn $data->as_string;
+    if ($request_number == 4) {
+      cmp_ok($data->header('Connection'), '==', undef, 'ignore bogus header');
+    }
+    if ($state eq 'data') {
+      my $data = $filter->get_pending;
+      use Data::Dumper;
+      $data = $data->[0];
+      chomp($data);
+      is($data, shift @content, 'got the right content');
+      #warn Dumper $data;
+      $filter = POE::Filter::HTTPHead->new;
+    }
+    $state = 'head';
+    $request_number++;
+  } elsif (substr ($_, 0, 6) eq '--data') {
+    $state = 'data';
+  } else {
+    $filter->get_one_start([$_]);
   }
-  $request_number--;
-
-  $request_number == 7 and isa_ok($data, 'HTTP::Response', "Ok sans headers");
-  $request_number == 6 and isa_ok($data, 'HTTP::Response', "Got our object");
-  $request_number == 5 and ok(
-    defined($data) && $data->protocol() eq "HTTP/0.9",
-    "Parsed HTTP/0.9 content-only request"
-  );
-  $request_number == 4 and ok(
-    !defined($data->header('Connection')),
-    "Not picking up bad request headers"
-  );
-  $request_number == 3 and isa_ok($data, 'HTTP::Response', "No HTTP version");
-  if ($request_number <= 2) {
-    $heap->{wheel}->set_filter(POE::Filter::Line->new());
-  }
-}
-
-sub error {
-  my $heap = $_[HEAP];
-  my ($type, $errno, $errmsg, $id) = @_[ARG0..$#_];
-
-  is($errno, 0, "got EOF");
-  delete $heap->{wheel};
 }
 
 # below is a list of the heads of HTTP responses (i.e with no content)
@@ -97,7 +60,8 @@ sub error {
 __DATA__
 HTTP/1.1 202 Accepted
 
-HTTP/1.1 200 Ok
+--end--
+HTTP/1.1 203 Ok
 Date: Mon, 08 Nov 2004 21:37:20 GMT
 Server: Apache/2.0.50 (Debian GNU/Linux) DAV/2 SVN/1.0.1-dev mod_ssl/2.0.50 OpenSSL/0.9.7d
 Last-Modified: Sat, 24 Nov 2001 16:48:12 GMT
@@ -108,8 +72,10 @@ Connection: close
 Content-Type: text/html;
         charset=ISO-8859-1
 
+--end-- this gets treated as a HTTP/0.9 response. 0.9 was silly.
 garble
-HTTP/1.1 200 Ok
+--end--
+HTTP/1.1 204 Ok
 Date: Mon, 08 Nov 2004 21:37:20 GMT
 Server: Apache/2.0.50 (Debian GNU/Linux) DAV/2 SVN/1.0.1-dev mod_ssl/2.0.50 OpenSSL/0.9.7d
 Last-Modified: Sat, 24 Nov 2001 16:48:12 GMT
@@ -120,7 +86,8 @@ Connection close
 Content-Type: text/html;
         charset=ISO-8859-1
 
-200 Ok
+--end--
+209 Ok
 Date: Mon, 08 Nov 2004 21:37:20 GMT
 Server: Apache/2.0.50 (Debian GNU/Linux) DAV/2 SVN/1.0.1-dev mod_ssl/2.0.50 OpenSSL/0.9.7d
 Last-Modified: Sat, 24 Nov 2001 16:48:12 GMT
@@ -131,7 +98,8 @@ Connection: close
 Content-Type: text/html;
         charset=ISO-8859-1
 
-HTTP/1.1 200 Ok
+--end--
+HTTP/1.1 210 Ok
 Date: Mon, 08 Nov 2004 21:37:20 GMT
 Server: Apache/2.0.50 (Debian GNU/Linux) DAV/2 SVN/1.0.1-dev mod_ssl/2.0.50 OpenSSL/0.9.7d
 Last-Modified: Sat, 24 Nov 2001 16:48:12 GMT
@@ -142,4 +110,6 @@ Connection: close
 Content-Type: text/html;
         charset=ISO-8859-1
 
+--data--
 content
+--end--
