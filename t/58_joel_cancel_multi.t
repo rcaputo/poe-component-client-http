@@ -58,25 +58,24 @@ exit;
 sub client_start{
   my $request = HTTP::Request->new('GET', "http://www.google.com/");
   ok(
-	$_[KERNEL]->post( ua => request => response => $request ),
-	"post 1st req succeeds"
+  $_[KERNEL]->post( ua => request => response => $request ),
+  "post 1st req succeeds"
   );
 
   my $req2 = HTTP::Request->new('GET', "http://www.google.com/");
   ok(
     $_[KERNEL]->post( ua => request => response => $req2 ),
-	"post 2nd req succeeds"
+  "post 2nd req succeeds"
   );
 
   my $req3 = HTTP::Request->new('GET', "http://poe.perl.org/");
   ok (
     $_[KERNEL]->post( ua => request => response => $req3 ),
-	"post 3rd req succeeds"
+  "post 3rd req succeeds"
   );
-	
+
 
   ok( $_[KERNEL]->post( ua => cancel => $request ), "cancel 1st req succeeds" );
-
 }
 
 

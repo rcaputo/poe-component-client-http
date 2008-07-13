@@ -274,20 +274,20 @@ sub _poco_weeble_request {
 
   my $cm_req_id;
   eval {
-      # get a connection from Client::Keepalive
-      $request->[REQ_CONN_ID] = $heap->{cm}->allocate(
-        scheme  => $request->scheme,
-        addr    => $request->host,
-        port    => $request->port,
-        context => $request->ID,
-        event   => 'got_connect_done',
-        @timeout,
-      );
+    # get a connection from Client::Keepalive
+    $request->[REQ_CONN_ID] = $heap->{cm}->allocate(
+      scheme  => $request->scheme,
+      addr    => $request->host,
+      port    => $request->port,
+      context => $request->ID,
+      event   => 'got_connect_done',
+      @timeout,
+    );
   };
   if ($@) {
-      delete $heap->{request}->{$request->ID};
-      # we can reach here for things like host being invalid.
-      $request->error(400, $@);
+    delete $heap->{request}->{$request->ID};
+    # we can reach here for things like host being invalid.
+    $request->error(400, $@);
   }
 }
 
@@ -302,10 +302,24 @@ sub _poco_weeble_connect_done {
   my $connection = $response->{'connection'};
   my $request_id = $response->{'context'};
 
+  # Can't handle connections if we're shut down.
+  # TODO - How do we still get these?  Were they previously queued or
+  # something?
+  if ($heap->{is_shut_down}) {
+    _internal_cancel(
+      $heap, $request_id, 408, "Request timed out (request canceled)"
+    );
+    return;
+  }
+
   if (defined $connection) {
     DEBUG and warn "CON: request $request_id connected ok...";
 
     my $request = $heap->{request}->{$request_id};
+    unless (defined $request) {
+      DEBUG and warn "CON: ignoring connection for canceled request";
+      return;
+    }
 
     my $block_size = $heap->{factory}->block_size;
 
@@ -466,8 +480,9 @@ sub _poco_weeble_io_error {
   my ($kernel, $heap, $operation, $errnum, $errstr, $wheel_id) =
     @_[KERNEL, HEAP, ARG0..ARG3];
 
-  DEBUG and
-    warn "I/O: wheel $wheel_id encountered $operation error $errnum: $errstr";
+  DEBUG and warn(
+    "I/O: wheel $wheel_id encountered $operation error $errnum: $errstr"
+  );
 
   # Drop the wheel.
   my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
@@ -544,7 +559,7 @@ sub _poco_weeble_io_error {
     # not acceptable according to the accept headers sent in the
     # request.
 
-    $request->error (406, "Response larger than MaxSize - $request_id");
+    $request->error(406, "Response larger than MaxSize - $request_id");
   }
 }
 
@@ -895,12 +910,12 @@ sub _internal_cancel {
   my $request = delete $heap->{request}{$request_id};
   return unless defined $request;
 
-  DEBUG and warn "SHT: Shutdown is canceling request $request_id";
+  DEBUG and warn "CXL: canceling request $request_id";
   $request->remove_timeout();
 
   if (my $wheel = $request->wheel) {
     my $wheel_id = $wheel->ID;
-    DEBUG and warn "SHT: Request $request_id canceling wheel $wheel_id";
+    DEBUG and warn "CXL: Request $request_id canceling wheel $wheel_id";
     delete $heap->{wheel_to_request}{$wheel_id};
     delete $heap->{request_to_id}{$request->[REQ_REQUEST]};
     $wheel = undef;
@@ -917,7 +932,7 @@ sub _internal_cancel {
   }
 
   unless ($request->[REQ_STATE] & RS_POSTED) {
-    $request->error(408, "Request timed out (component shut down)");
+    $request->error($code, $message);
   }
 }
 
@@ -936,7 +951,7 @@ sub _poco_weeble_shutdown {
 
   # Shut down the connection manager subcomponent.
   if (defined $heap->{cm}) {
-    DEBUG and warn "SHT: Client::HTTP shutting down Client::Keepalive";
+    DEBUG and warn "CXL: Client::HTTP shutting down Client::Keepalive";
     $heap->{cm}->shutdown();
     delete $heap->{cm};
   }

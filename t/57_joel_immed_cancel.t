@@ -31,4 +31,5 @@ sub client_start {
 sub response_handler {
   my $response = $_[ARG1][0];
   is( $response->code, 408, "timeout on a canceled request" );
+  $_[KERNEL]->post( ua => "shutdown" );
 }
