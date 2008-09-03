@@ -19,7 +19,6 @@ t/05_request.t
 t/06_factory.t
 t/07_proxy.t
 t/08_discard.t
-t/09_bad_scheme.t
 t/10_shutdown.t
 t/11_cancel.t
 t/12_pod.t
@@ -32,6 +31,4 @@ t/53_response_parser.t
 t/54_hzheng_head_redir.t
 t/55_reiss_double_resp.t
 t/56_redirect_excess.t
-t/57_joel_immed_cancel.t
 t/58_joel_cancel_multi.t
-t/59_andy_one_keepalive.t

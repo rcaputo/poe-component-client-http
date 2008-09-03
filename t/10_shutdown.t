@@ -4,26 +4,30 @@
 
 use strict;
 
-use HTTP::Request::Common qw(GET POST);
-
-sub POE::Kernel::ASSERT_DEFAULT () { 1 }
-use POE qw(Component::Client::HTTP Component::Client::Keepalive);
+use HTTP::Request::Common qw(GET);
+use Test::More;
+use Test::POE::Server::TCP;
 
 sub DEBUG () { 0 }
+sub POE::Kernel::ASSERT_DEFAULT () { DEBUG }
 
-use Test::More tests => 1;
+use POE qw(Component::Client::HTTP);
+
+
+plan tests => 2;
 
 # Create a weeble component.
-POE::Component::Client::HTTP->spawn( Timeout => 60 );
+POE::Component::Client::HTTP->spawn( Timeout => 1 );
 
 # Create a session that will make some requests.
 POE::Session->create(
   inline_states => {
     _start              => \&client_start,
-    _stop               => \&client_stop,
+    stop_httpd          => \&client_stop,
     got_response        => \&client_got_response,
     do_shutdown         => \&client_got_shutdown,
-    do_setup            => \&client_got_setup,
+    testd_registered    => \&testd_got_setup,
+    testd_connected     => \&testd_got_input,
   },
 );
 
@@ -37,20 +41,31 @@ sub client_start {
 
   DEBUG and warn "client starting...\n";
 
-  $kernel->yield("do_setup");
+  # run a server just in case of a screwup and we *do* get requests.
+  $heap->{testd} = Test::POE::Server::TCP->spawn(
+    Filter => POE::Filter::Stream->new,
+    address => 'localhost',
+  );
+
   $kernel->yield("do_shutdown");
 }
 
-sub client_got_setup {
-  my $kernel = $_[KERNEL];
+sub testd_got_setup {
+  my ($kernel, $heap) = @_[KERNEL, HEAP];
   DEBUG and warn "client got setup...\n";
+
+  my $port = $heap->{testd}->port;
 
   for (1..2) {
     $kernel->post(
       weeble => request => got_response =>
-      GET('http://poe.perl.org/misc/test.html', Connection => 'close'),
+      GET("http://localhost:$port/test.html", Connection => 'close'),
     );
   }
+}
+
+sub testd_got_input {
+  BAIL_OUT('There should be NO requests');
 }
 
 sub client_got_shutdown {
@@ -63,11 +78,10 @@ sub client_stop {
   my $heap = $_[HEAP];
   DEBUG and warn "client stopped...\n";
 
-  is_deeply(
-    $heap->{got_response},
-    { 408 => 2 },
-    "Got two 408s (time outs)"
-  );
+  if ($heap->{testd}) {
+    $heap->{testd}->shutdown;
+    delete $heap->{testd};
+  }
 }
 
 sub client_got_response {
@@ -91,5 +105,8 @@ sub client_got_response {
 
   # Track how many of each response code we get.
   # Should be two 408s, indicating two connection timeouts.
-  $heap->{got_response}{$http_response->code()}++;
+  is ($http_response->code, 408, "Got the expected timeout");
+
+  # wrong place really, but works since we're not getting anything
+  $kernel->yield('stop_httpd');
 }

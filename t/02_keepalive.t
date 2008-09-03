@@ -1,87 +1,114 @@
 # $Id$
-# vim: filetype=perl
-
+# vim: filetype=perl sts=2 sw=2
 use strict;
 
-use HTTP::Request::Common qw(GET POST);
-
-sub POE::Kernel::ASSERT_DEFAULT () { 1 }
-use POE qw(Component::Client::HTTP Component::Client::Keepalive);
-
 sub DEBUG () { 0 }
+#sub POE::Kernel::ASSERT_DEFAULT () { 1 }
 
-sub MAX_BIG_REQUEST_SIZE  () { 4096 }
-sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
+use POE qw(Component::Client::HTTP Component::Client::Keepalive);
+use Test::POE::Server::TCP;
+use HTTP::Request::Common qw(GET);
+use Test::More;
 
-my $cm;
 $| = 1;
 
-my @test_results = (
-  'not ok 1', 'not ok 2', 'not ok 3', 'not ok 4', 'not ok 5',
-  'not ok 6', 'not ok 7', 'not ok 8', # 'not ok 9',
+# set max_per_host, so we can more easily determine whether we're
+# reusing connections when expected.
+my $cm = POE::Component::Client::Keepalive->new(
+  max_per_host => 1
 );
+my @requests;
+my $data = <<EOF;
+200 OK HTTP/1.1
+Server: Test-POE-Server-TCP
+CONNECTION
+Content-Length: 118
+Content-Type: text/html
 
-print "1..", scalar @test_results, "\n";
+<html>
+<head><title>Test Page</title></head>
+<body><p>This page exists to test POE web components.</p></body>
+</html>
+EOF
 
 sub client_start {
   my ($kernel, $heap) = @_[KERNEL, HEAP];
 
   DEBUG and warn "client starting...\n";
 
-  $kernel->post( weeble => request => got_first_response =>
-    GET(
-      "http://poe.perl.org/misc/test.cgi?TESTA",
-      Connection => "Keep-Alive",
-    ),
+  $_[HEAP]->{testd} = Test::POE::Server::TCP->spawn(
+    filter => POE::Filter::Stream->new,
+    address => 'localhost',
+  );
+  my $port = $_[HEAP]->{testd}->port;
+
+  @requests = (
+    GET("http://localhost:$port/test.cgi?FIRST", Connection => "Keep-Alive"),
+    GET("http://localhost:$port/test.cgi?TEST2", Connection => "Keep-Alive"),
+    GET("http://localhost:$port/test.cgi?TEST3"),
+    GET("http://localhost:$port/test.cgi?TEST4", Connection => "Close"),
+    GET("http://localhost:$port/test.cgi?TEST5"),
   );
 
-  $heap->{ka_count} = 5;
+  #plan 'no_plan';
+  plan tests => scalar @requests * 2;
+}
+
+sub testd_registered {
+  my ($kernel) = $_[KERNEL];
+
+  my $r = shift @requests;
+  $kernel->post( weeble => request => got_response => $r );
+}
+
+my $ka = "Connection: Keep-Alive\nKeep-Alive: timeout=2, max=100";
+my $cl = "Connection: Close";
+
+sub testd_disconnected {
+  my ($kernel, $heap, $id) = @_[KERNEL, HEAP, ARG0];
+  if ($heap->{do_shutdown}) {
+    $heap->{testd}->shutdown;
+  } else {
+    is($heap->{prevtype}, 'close', "shutting down a 'close' connection");
+  }
+  #warn "disconnected $id";
+}
+
+sub timeout {
+  my ($kernel, $heap, $id) = @_[KERNEL, HEAP, ARG0];
+  #warn "terminating";
+  $heap->{do_shutdown} = 1;
+  $heap->{testd}->terminate($id);
+}
+
+sub testd_client_input {
+  my ($kernel, $heap, $id, $input) = @_[KERNEL, HEAP, ARG0, ARG1];
+
+#warn $id;
+  if (defined $heap->{previd}) {
+    if ($heap->{prevtype} eq 'reuse') {
+      is($id, $heap->{previd}, "reused connection");
+    } else {
+      isnt($id, $heap->{previd}, "new connection");
+    }
+  }
+  ##warn $input;
+  my $tosend = $data;
+  if ($input =~ /Close/) {
+    $heap->{testd}->disconnect($id);
+    $heap->{prevtype} = 'close';
+    my $tosend =~ s/CONNECTION/$cl/;
+  } else {
+    $kernel->delay('timeout', 2, $id);
+    $heap->{prevtype} = 'reuse';
+    my $tosend =~ s/CONNECTION/$ka/;
+  }
+  $heap->{previd} = $id;
+  $heap->{testd}->send_to_client($id, $tosend);
 }
 
 sub client_stop {
   DEBUG and warn "client stopped...\n";
-  foreach (@test_results) {
-    print "$_\n";
-  }
-  $cm->shutdown;
-  $cm = undef;
-}
-
-sub client_got_first_response {
-  my ($heap, $kernel, $request_packet, $response_packet) = @_[
-    HEAP, KERNEL, ARG0, ARG1
-  ];
-  my $http_request  = $request_packet->[0];
-  my $http_response = $response_packet->[0];
-
-  DEBUG and do {
-    warn "got_first_response...\n";
-
-    my $response_string = $http_response->as_string();
-    $response_string =~ s/^/| /mg;
-
-    warn ",", '-' x 78, "\n";
-    warn $response_string;
-    warn "`", '-' x 78, "\n";
-  };
-
-  my $request_path = $http_request->uri->path . ''; # stringify
-
-  return unless defined $http_response->code;
-  return unless $http_response->code == 200;
-  return unless $request_path =~ /\/test\.cgi$/;
-  return unless $heap->{ka_count}--;
-
-  $test_results[0] = 'ok 1';
-
-  # Send a keep-alive request.
-  $kernel->post(
-    weeble => request => got_response =>
-    GET(
-      "http://poe.perl.org/misc/test.cgi?TEST1",
-      Connection => "Keep-Alive",
-    ),
-  );
 }
 
 sub client_got_response {
@@ -107,114 +134,24 @@ sub client_got_response {
   my $request_path = $http_request->uri->path . ''; # stringify
   my $request_uri  = $http_request->uri       . ''; # stringify
 
-  return unless defined $http_response->code();
+  is($http_response->code, 200, "got OK response code");
 
-  my $response_string = $http_response->as_string();
-
-  return unless $http_response->code == 200;
-
-  # Received a keep-alive response.  Send another, and test that the
-  # socket is reused.
-  if ($response_string =~ /TEST1/ and $heap->{ka_count}--) {
-    $test_results[1] = 'ok 2';
-    $kernel->post(
-      weeble => request => got_response =>
-      GET(
-        "http://poe.perl.org/misc/test.cgi?TEST2",
-        Connection => "Keep-Alive",
-      ),
-    );
-    return;
-  }
-
-  # Received a second keep-alive response.  Send a request with no
-  # Connection header.
-  if ($response_string =~ /TEST2/ and $heap->{ka_count}--) {
-    $test_results[2] = 'ok 3';
-    $kernel->post(
-      weeble => request => got_response =>
-      GET("http://poe.perl.org/misc/test.cgi?TEST3"),
-    );
-    return;
-  }
-
-  # Received response from request without Connection header.  Send a
-  # close-after-response request.
-  if ($response_string =~ /TEST3/) {
-    $test_results[3] = 'ok 4';
-    $kernel->post(
-      weeble => request => got_response =>
-      GET(
-        "http://poe.perl.org/misc/test.cgi?TEST4",
-        Connection => "Close"
-      ),
-    );
-    return;
-  }
-
-  # Received close-after-response request.  Send a request to test
-  # chunking.
-  if ($response_string =~ /TEST4/) {
-    $test_results[4] = 'ok 5';
-    $kernel->post( chunk => request => got_response =>
-      GET(
-        "http://poe.perl.org/misc/test.cgi?DOGS",
-        Connection => 'close',
-      ),
-    );
-    return;
-  }
-
-  # Received chunked response.  Make another chunked request.
-  if ($response_string =~ /DOGS/) {
-    $test_results[5] = 'ok 6';
-    $kernel->post( chunk => request => got_response =>
-      GET(
-        "http://poe.perl.org/misc/test.cgi?CATS",
-        Connection => 'close',
-      ),
-    );
-    return;
-  }
-
-  # Make a chunked redirection test.
-  if ($response_string =~ /CATS/) {
-    $test_results[6] = 'ok 7';
-    $kernel->post( chunk => request => got_response =>
-      GET(
-        'http://poe.perl.org/misc/redir-test.cgi',
-        Connection => 'close',
-      ),
-    );
-    return;
-  }
-
-  # Chunked redirection was fine.  Hey, we're done!
-  if ($request_uri =~ /redir-test/ and $response_string =~ /Test Page/) {
-    $test_results[7] = 'ok 8';
-    return;
+  if (@requests) {
+  $kernel->post(weeble => request => got_response => shift @requests);
+  } else {
+    # TODO: figure out why this doesn't trigger an immediate
+    # disconnect on the testd.
+    $cm->shutdown;
+    $cm = undef;
   }
 }
 
 #------------------------------------------------------------------------------
 
-# Create a Client::Keepalive component
-$cm = POE::Component::Client::Keepalive->new;
-
 # Create a weeble component.
 POE::Component::Client::HTTP->spawn(
   #MaxSize           => MAX_BIG_REQUEST_SIZE,
-  Timeout           => 60,
-  ConnectionManager => $cm,
-);
-
-# Create a weeble component.
-POE::Component::Client::HTTP->spawn(
-  Alias             => 'chunk',
-  MaxSize           => MAX_BIG_REQUEST_SIZE,
-  Timeout           => 60,
-  FollowRedirects   => 1,
-  Protocol          => 'HTTP/1.1',
+  Timeout           => 1,
   ConnectionManager => $cm,
 );
 
@@ -223,12 +160,14 @@ POE::Session->create(
   inline_states => {
     _start              => \&client_start,
     _stop               => \&client_stop,
-    got_first_response  => \&client_got_first_response,
     got_response        => \&client_got_response,
-    got_big_response    => \&client_got_big_response,
-    got_stream_response => \&client_got_stream_response,
-    got_redir_response  => \&client_got_redir_response,
   },
+  package_states => [main => [qw(
+    testd_registered
+    testd_client_input
+    testd_disconnected
+    timeout
+  )]],
 );
 
 # Run it all until done.

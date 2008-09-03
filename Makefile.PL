@@ -15,6 +15,7 @@ my %prereq = (
   'URI'                => 1.24,
   'Net::HTTP::Methods' => 0.02,
   'POE::Component::Client::Keepalive' => 0.1001,
+  'Test::POE::Server::TCP' => 0,
 );
 
 # Write that makefile.

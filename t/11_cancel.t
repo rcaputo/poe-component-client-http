@@ -4,18 +4,20 @@
 
 use strict;
 
-use HTTP::Request::Common qw(GET POST);
-
-use lib '/home/troc/perl/poe';
-sub POE::Kernel::ASSERT_DEFAULT () { 1 }
-use POE qw(Component::Client::HTTP Component::Client::Keepalive);
+use HTTP::Request::Common qw(GET);
+use Test::More;
 
 sub DEBUG () { 0 }
+sub POE::Kernel::ASSERT_DEFAULT () { DEBUG }
+
+use POE qw(Component::Client::HTTP Filter::Stream);
+use Test::POE::Server::TCP;
+
 
 sub MAX_BIG_REQUEST_SIZE  () { 4096 }
 sub MAX_STREAM_CHUNK_SIZE () { 1024 }  # Needed for agreement with test CGI.
 
-use Test::More tests => 1;
+plan tests => 1;
 
 # Create the HTTP client session.
 
@@ -31,10 +33,21 @@ POE::Session->create(
     _start        => \&client_start,
     _stop         => \&client_stop,
     got_response  => \&client_got_response,
+    testd_registered => \&testd_start,
+    testd_client_input => \&testd_input,
+    testd_disconnected => \&testd_disc,
+    testd_client_flushed => \&testd_out,
   }
 );
 
 # Run it all until done.
+
+my $head = <<EOF;
+HTTP/1.1 200 OK
+Connection: close
+Transfer-Encoding: chunked
+
+EOF
 
 POE::Kernel->run();
 exit;
@@ -46,17 +59,51 @@ sub client_start {
 
   DEBUG and warn "client starting...\n";
 
+  $heap->{testd} = Test::POE::Server::TCP->spawn(
+    Filter => POE::Filter::Stream->new,
+    address => 'localhost',
+  );
+}
+
+sub testd_start {
+  my ($kernel, $heap) = @_[KERNEL, HEAP];
+
+  my $port = $heap->{testd}->port;
   $kernel->post(
     streamer => request => got_response =>
     GET(
-      'http://poe.perl.org/misc/chunk-test.cgi',
+      "http://localhost:$port/misc/chunk-test.cgi",
       Connection => 'close',
     ),
   );
 }
 
+sub testd_out {
+  my ($kernel, $heap, $id) = @_[KERNEL, HEAP, ARG0];
+
+  return unless ($heap->{datachar} < 26);
+
+  my $data = "200\n";
+  my $chr = ord('A') + $heap->{datachar}++;
+  $data .= chr($chr) x 512 . "\n";
+  $heap->{testd}->send_to_client($id, $data);
+}
+
+sub testd_input {
+  my ($kernel, $heap, $id, $input) = @_[KERNEL, HEAP, ARG0, ARG1];
+
+  $heap->{testd}->send_to_client($id, $head);
+  $heap->{datachar} = 0;
+}
+
 sub client_stop {
   DEBUG and warn "client stopped...\n";
+}
+
+sub testd_disc {
+  DEBUG and warn "server got disconnected...";
+  $_[HEAP]->{testd}->shutdown;
+  delete $_[HEAP]->{testd};
 }
 
 my $total_octets_got = 0;
@@ -94,8 +141,5 @@ sub client_got_response {
   }
 
   $total_octets_got += length($chunk_buffer);
-  ok (
-    ($total_octets_got == MAX_STREAM_CHUNK_SIZE),
-    "wanted total(" . MAX_STREAM_CHUNK_SIZE . ") got $total_octets_got"
-  );
+  is($total_octets_got, MAX_STREAM_CHUNK_SIZE, "Got the right amount of data");
 }

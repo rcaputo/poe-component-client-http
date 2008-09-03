@@ -228,6 +228,7 @@ sub add_eof {
       "got " . $self->[REQ_OCTETS_GOT] . " of " .
       $self->[REQ_RESPONSE]->content_length
     );
+    #TODO: shouldn't this be 406 as per RT #20975?
     $self->error(
       400,
       "incomplete response b " . $self->[REQ_ID] . ".  Wanted " .

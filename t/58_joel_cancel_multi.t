@@ -6,21 +6,26 @@ use strict;
 use warnings;
 use HTTP::Request;
 use HTTP::Status;
-use Test::More tests => 16;
+use Test::More;
+
+plan tests => 4;
 
 use constant DEBUG => 0;
 
 sub POE::Kernel::TRACE_EVENTS     () { 0 }
 sub POE::Kernel::TRACE_REFCNT     () { 0 }
 sub POE::Kernel::CATCH_EXCEPTIONS () { 0 }
-use POE qw(Component::Client::HTTP);
+use Test::POE::Server::TCP;
+use POE qw(Filter::Stream Component::Client::HTTP);
 
 POE::Component::Client::HTTP->spawn( Alias => 'ua' );
 
 POE::Session->create(
   inline_states => {
     _start   => \&client_start,
-    response => \&response_handler
+    response => \&response_handler,
+    testd_registered => \&testd_start,
+    testd_client_input => \&testd_input,
   }
 );
 
@@ -28,68 +33,62 @@ our %responses;
 eval { POE::Kernel->run(); };
 ok (!$@, "cancelling req before connection succeeds does not die");
 diag($@) if $@;
-is (scalar keys %responses, 2, "got 2 HTTP responses");
-ok (exists $responses{'http://poe.perl.org/'}, "got response from poe.perl.org");
-ok (exists $responses{'http://www.google.com/'}, "got response from poe.perl.org");
-
-my $poe = $responses{'http://poe.perl.org/'};
-is (scalar @{ $poe }, 1, "1 response for poe.perl.org");
-ok ( $poe->[0]->is_success, "successful request to poe.perl.org" );
-
-my $google = $responses{'http://www.google.com/'};
-is (scalar @{ $google }, 2, "2 responses for www.google.com");
-my ($ok, $timeout) = 0;
-for (@{ $google }) {
-  my $code = $_->code;
-  if ($code == RC_OK || $code == RC_FOUND) {
-    $ok++;
-  } elsif ($code == RC_REQUEST_TIMEOUT) {
-    $timeout++;
-  } else {
-    warn "unexpected status code $code";
-  }
-}
-
-is( $ok,      1, "got one successful response from google.com" );
-is( $timeout, 1, "got one timed-out response from google.com" );
 
 exit;
 
 sub client_start{
-  my $request = HTTP::Request->new('GET', "http://www.google.com/");
-  ok(
-  $_[KERNEL]->post( ua => request => response => $request ),
-  "post 1st req succeeds"
+  my ($kernel, $heap) = @_[KERNEL, HEAP];
+
+  DEBUG and warn "client starting...\n";
+
+  $heap->{testd} = Test::POE::Server::TCP->spawn(
+    Filter => POE::Filter::Stream->new,
+    address => 'localhost',
   );
-
-  my $req2 = HTTP::Request->new('GET', "http://www.google.com/");
-  ok(
-    $_[KERNEL]->post( ua => request => response => $req2 ),
-  "post 2nd req succeeds"
-  );
-
-  my $req3 = HTTP::Request->new('GET', "http://poe.perl.org/");
-  ok (
-    $_[KERNEL]->post( ua => request => response => $req3 ),
-  "post 3rd req succeeds"
-  );
-
-
-  ok( $_[KERNEL]->post( ua => cancel => $request ), "cancel 1st req succeeds" );
 }
 
+sub testd_start {
+  my ($kernel, $heap) = @_[KERNEL, HEAP];
+
+  my $port = $heap->{testd}->port;
+
+  my $request = HTTP::Request->new('GET', "http://localhost:$port/cancel");
+  my $req2    = HTTP::Request->new('GET', "http://localhost:$port/one");
+
+  $_[KERNEL]->post( ua => request => response => $request );
+  $_[KERNEL]->post( ua => request => response => $req2 );
+
+  $_[KERNEL]->post( ua => cancel  => $request );
+}
+
+sub testd_input {
+  my ($kernel, $heap, $id, $input) = @_[KERNEL, HEAP, ARG0, ARG1];
+
+  my $data = <<'EOF';
+HTTP/1.1 204 OK
+
+EOF
+  if ($input =~ /(?:one|two)/) {
+    pass("got expected request");
+    $heap->{testd}->send_to_client($id, $data);
+  } elsif ($input =~ /cancel/) {
+    fail("got request that was supposed to be cancelled");
+    $heap->{testd}->send_to_client($id, $data);
+  } else {
+    BAIL_OUT("got a request that isn't even supposed to exist");
+  }
+}
 
 sub response_handler {
+  my $heap = $_[HEAP];
   my $response = $_[ARG1][0];
-  ok(defined $response, "got a " . $response->code . " HTTP response");
-  if (DEBUG) {
-    print $response->as_string();
-    print "\n\n", $response->server, "\n\n";
-  }
-  my $base = $response->base->as_string;
-  if (exists $responses{$base}) {
-    push @{$responses{$base}}, $response;
-  } else {
-    $responses{$base} = [ $response ];
+  my $request  = $_[ARG0][0];
+
+  my $path = $request->uri->path;
+  if ($path eq '/cancel') {
+    is ($response->code, 408, "got a correct response code for the cancelled request");
+  } elsif ($path eq '/one') {
+    is ($response->code, 204, "got a correct response code for the non-cancelled request");
+    $heap->{testd}->shutdown;
   }
 }

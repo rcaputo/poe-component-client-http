@@ -11,37 +11,41 @@ use Test::POE::Server::TCP;
 
 my @requests;
 my $long = <<EOF;
-200 OK HTTP/1.1
+200 OK
 Connection: close
 Content-Length: 300
-Bogus-Header: crap
-
+Bogus-Header: 
 EOF
 
 chomp $long;
-$long .= "\n" . "x" x 300;
+$long .= "x" x 300;
 
 my $data = <<EOF;
-200 OK HTTP/1.1
+HTTP/1.1 200 OK
 Connection: close
-Content-Length: 118
-Content-Type: text/html
+Content-Type: text/plain
+Transfer-Encoding: chunked
 
-<html>
-<head><title>Test Page</title></head>
-<body><p>This page exists to test POE web components.</p></body>
-</html>
 EOF
 
+$data .= "fe6\n"  . "A" x 1024 . "B" x 1024 . "C" x 1024 . "D" x 998  . "\n";
+$data .= "2000\n" . "D" x 26   . "E" x 1024 . "F" x 1024 . "G" x 1024 .
+                    "H" x 1024 . "I" x 1024 . "J" x 1024 . "K" x 1024 .
+                    "L" x 998  .                                        "\n";
+$data .= "2000\n" . "L" x 26   . "M" x 1024 . "N" x 1024 . "O" x 1024 .
+                    "P" x 1024 . "Q" x 1024 . "R" x 1024 . "S" x 1024 .
+                    "T" x 998  .                                        "\n";
+$data .= "181a\n" . "T" x 26   . "U" x 1024 . "V" x 1024 . "W" x 1024 .
+                    "X" x 1024 . "Y" x 1024 . "Z" x 1024 .              "\n";
+$data .= "0\n";
+
+my @expect = qw(A D L T);
 use HTTP::Request::Common qw(GET POST);
 
 #my $cm = POE::Component::Client::Keepalive->new;
 POE::Component::Client::HTTP->spawn(
-  #MaxSize => MAX_BIG_REQUEST_SIZE,
-  MaxSize => 200,
+  Streaming => 256,
   Timeout => 1,
-  #Protocol => 'HTTP/1.1', #default
-  #ConnectionManager => $cm, #default
 );
 
 POE::Session->create(
@@ -65,26 +69,11 @@ sub _start {
     address => 'localhost',
   );
   my $port = $_[HEAP]->{testd}->port;
-  my @badrequests = (
-    GET("http://not.localhost/badhost"),
-    GET("file:///from/a/local/filesystem"),
-  );
-
-  my @fields = ('field1=111&', 'field2=222');
-
   @requests = (
-    GET("http://localhost:$port/test", Connection => 'close'),
-    GET("http://localhost:$port/timeout", Connection => 'close'),
-    POST("http://localhost:$port/post", [field1 => '111', field2 => '222']),
-    GET("http://localhost:$port/long", Connection => 'close'),
-    HTTP::Request->new(POST =>
-        "http://localhost:$port/post", [],
-        sub { return shift @fields }
-      ),
-    @badrequests,
+    GET("http://localhost:$port/stream", Connection => 'close'),
   );
   
-  plan tests => @requests * 2 - @badrequests;
+  plan tests => @requests * 6;
 }
 
 sub testd_registered {
@@ -104,14 +93,14 @@ sub send_after_timeout {
   my ($heap, $id) = @_[HEAP, ARG0];
 
   $heap->{testd}->send_to_client($id, $data);
-  $heap->{testd}->shutdown;
 }
 
 sub testd_client_input {
   my ($kernel, $heap, $id, $input) = @_[KERNEL, HEAP, ARG0, ARG1];
-  #warn $input;
-  if ($input =~ /^GET \/test/) {
+  warn $input;
+  if ($input =~ /^GET \/stream/) {
     ok(1, "got test request");
+    warn length $data;
     $heap->{testd}->send_to_client($id, $data);
   } elsif ($input =~ /^GET \/timeout/) {
     ok(1, "got test request we will let timeout");
@@ -119,43 +108,46 @@ sub testd_client_input {
   } elsif ($input =~ /^POST \/post.*field/s) {
     ok(1, "got post request with content");
     $heap->{testd}->send_to_client($id, $data);
-  } elsif ($input =~ /^POST/) {
-    $heap->{waitforcontent} = 1;
-  } elsif (delete $heap->{waitforcontent} and $input =~ /field/) {
-    ok(1, "got content for post request with callback");
-    $heap->{testd}->send_to_client($id, $data);
   } elsif ($input =~ /^GET \/long/) {
     ok(1, "sending too much data as requested");
     $heap->{testd}->send_to_client($id, $long);
   } else {
-    warn "INPUT: ", $input;
-    warn "unexpected test";
+    die "unexpected test";
   }
 }
+
 
 sub got_response {
   my ($kernel, $heap, $request_packet, $response_packet) = @_[KERNEL, HEAP, ARG0, ARG1];
 
   my $request = $request_packet->[0];
   my $response = $response_packet->[0];
+  my $chunk = $response_packet->[1];
 
   my $request_path = $request->uri->path . ''; # stringify
+  #warn $request_path;
+  #warn $response->as_string;
 
-  if ($request_path =~ m/\/test$/ and $response->code == 200) {
-    ok(1, 'got 200 response for test request')
+  if ($request_path =~ m/\/stream$/ and $response->code == 200) {
+    if (defined $chunk) {
+      if (my $next = shift @expect) {
+        is(substr($chunk, 0, 1), $next , "chunk starts with $next");
+      }
+    } else {
+      ok(@expect == 0);
+      $heap->{testd}->shutdown;
+    }
   } elsif ($request_path =~ m/timeout$/ and $response->code == 408) {
     ok(1, 'got 408 response for timed out request')
   } elsif ($request_path =~ m/\/post$/ and $response->code == 200) {
     ok(1, 'got 200 response for post request')
-  } elsif ($request_path =~ m/\/long$/ and $response->code == 400) {
-    ok(1, 'got 400 response for long request')
+  } elsif ($request_path =~ m/\/long$/ and $response->code == 406) {
+    ok(1, 'got 406 response for long request')
   } elsif ($request_path =~ m/badhost$/ and $response->code == 500) {
     ok(1, 'got 500 response for request on bad host')
   } elsif ($request_path =~ m/filesystem$/ and $response->code == 400) {
     ok(1, 'got 400 response for request with unsupported scheme')
   } else {
     ok(0, "unexpected response");
-    warn $request_path, $response->code;
-    warn $response->as_string;
   }
 }
