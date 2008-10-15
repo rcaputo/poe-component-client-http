@@ -982,7 +982,7 @@ POE::Component::Client::HTTP - a HTTP user-agent component
     Timeout   => 60,                    # defaults to 180 seconds
     MaxSize   => 16384,                 # defaults to entire response
     Streaming => 4096,                  # defaults to 0 (off)
-    FollowRedirects => 2                # defaults to 0 (off)
+    FollowRedirects => 2,               # defaults to 0 (off)
     Proxy     => "http://localhost:80", # defaults to HTTP_PROXY env. variable
     NoProxy   => [ "localhost", "127.0.0.1" ], # defs to NO_PROXY env. variable
     BindAddr  => "12.34.56.78",         # defaults to INADDR_ANY
