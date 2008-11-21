@@ -19,7 +19,7 @@ my $filter = POE::Filter::HTTPHead->new;
 
 my @content = qw(content);
 my $state = 'head';
-while ($_ = <DATA>) {
+while (<DATA>) {
   #warn "($state) LINE: $_";
   if (substr ($_, 0, 5)  eq '--end') {
     my $data = $filter->get_one;
@@ -27,7 +27,7 @@ while ($_ = <DATA>) {
     isa_ok($data, 'HTTP::Response');
     #warn $data->as_string;
     if ($request_number == 4) {
-      cmp_ok($data->header('Connection'), '==', undef, 'ignore bogus header');
+      isnt(defined($data->header('Connection')), 'ignore bogus header');
     }
     if ($state eq 'data') {
       my $data = $filter->get_pending;
