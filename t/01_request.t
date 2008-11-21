@@ -75,16 +75,16 @@ sub _start {
   @requests = (
     GET("http://localhost:$port/test", Connection => 'close'),
     GET("http://localhost:$port/timeout", Connection => 'close'),
-    POST("http://localhost:$port/post", [field1 => '111', field2 => '222']),
+    POST("http://localhost:$port/post1", [field1 => '111', field2 => '222']),
     GET("http://localhost:$port/long", Connection => 'close'),
-    HTTP::Request->new(POST =>
-        "http://localhost:$port/post", [],
-        sub { return shift @fields }
-      ),
+    HTTP::Request->new(
+      POST => "http://localhost:$port/post2",
+      [], sub { return shift @fields }
+    ),
     @badrequests,
   );
   
-  plan tests => @requests * 2 - @badrequests;
+  plan tests => @requests * 2 - @badrequests + 1;
 }
 
 sub testd_registered {
@@ -92,10 +92,9 @@ sub testd_registered {
 
   foreach my $r (@requests) {
     $kernel->post(
-        'weeble',
-        request =>
-          'got_response', 
-          $r,
+      'weeble',
+      request => 'got_response',
+      $r,
     );
   }
 }
@@ -109,28 +108,36 @@ sub send_after_timeout {
 
 sub testd_client_input {
   my ($kernel, $heap, $id, $input) = @_[KERNEL, HEAP, ARG0, ARG1];
-  #warn $input;
+
   if ($input =~ /^GET \/test/) {
-    ok(1, "got test request");
+    pass("got test request");
     $heap->{testd}->send_to_client($id, $data);
-  } elsif ($input =~ /^GET \/timeout/) {
-    ok(1, "got test request we will let timeout");
-    $kernel->delay_add('send_after_timeout', 1.1, $id);
-  } elsif ($input =~ /^POST \/post.*field/s) {
-    ok(1, "got post request with content");
-    $heap->{testd}->send_to_client($id, $data);
-  } elsif ($input =~ /^POST/) {
-    $heap->{waitforcontent} = 1;
-  } elsif (delete $heap->{waitforcontent} and $input =~ /field/) {
-    ok(1, "got content for post request with callback");
-    $heap->{testd}->send_to_client($id, $data);
-  } elsif ($input =~ /^GET \/long/) {
-    ok(1, "sending too much data as requested");
-    $heap->{testd}->send_to_client($id, $long);
-  } else {
-    warn "INPUT: ", $input;
-    warn "unexpected test";
   }
+  elsif ($input =~ /^GET \/timeout/) {
+    pass("got test request we will let timeout");
+    $kernel->delay_add('send_after_timeout', 1.1, $id);
+  }
+  elsif ($input =~ /^POST \/post.*field/s) {
+    pass("got post request with content");
+    $heap->{testd}->send_to_client($id, $data);
+  }
+  elsif ($input =~ /^POST \/post(\d)/) {
+    $heap->{waitforcontent} = $1;
+  }
+  elsif ($heap->{waitforcontent}-- and $input =~ /field/) {
+    pass("got content for post request with callback");
+    $heap->{testd}->send_to_client($id, $data);
+  }
+  elsif ($input =~ /^GET \/long/) {
+    pass("sending too much data as requested");
+    $heap->{testd}->send_to_client($id, $long);
+  }
+  else {
+    diag("INPUT: $input");
+    diag("unexpected test");
+  }
+
+  delete $heap->{waitforcontent} unless $heap->{waitforcontent};
 }
 
 sub got_response {
@@ -142,20 +149,28 @@ sub got_response {
   my $request_path = $request->uri->path . ''; # stringify
 
   if ($request_path =~ m/\/test$/ and $response->code == 200) {
-    ok(1, 'got 200 response for test request')
-  } elsif ($request_path =~ m/timeout$/ and $response->code == 408) {
-    ok(1, 'got 408 response for timed out request')
-  } elsif ($request_path =~ m/\/post$/ and $response->code == 200) {
-    ok(1, 'got 200 response for post request')
-  } elsif ($request_path =~ m/\/long$/ and $response->code == 400) {
-    ok(1, 'got 400 response for long request')
-  } elsif ($request_path =~ m/badhost$/ and $response->code == 500) {
-    ok(1, 'got 500 response for request on bad host')
-  } elsif ($request_path =~ m/filesystem$/ and $response->code == 400) {
-    ok(1, 'got 400 response for request with unsupported scheme')
-  } else {
-    ok(0, "unexpected response");
-    warn $request_path, $response->code;
-    warn $response->as_string;
+    pass('got 200 response for test request')
+  }
+  elsif ($request_path =~ m/timeout$/ and $response->code == 408) {
+    pass('got 408 response for timed out request')
+  }
+  elsif ($request_path =~ m/\/post\d$/ and $response->code == 200) {
+    pass('got 200 response for post request')
+  }
+  elsif ($request_path =~ m/\/long$/ and $response->code == 400) {
+    pass('got 400 response for long request')
+  }
+  elsif ($request_path =~ m/badhost$/ and $response->code == 500) {
+    pass('got 500 response for request on bad host')
+  }
+  elsif ($request_path =~ m/filesystem$/ and $response->code == 400) {
+    pass('got 400 response for request with unsupported scheme')
+  }
+  else {
+    fail("unexpected response");
+    diag("path($request_path) code(" . $response->code() . ")");
+    diag("response(((");
+    diag($response->as_string);
+    diag(")))");
   }
 }
