@@ -24,7 +24,7 @@ sub client_start {
   DEBUG and warn "client starting...\n";
 
   my $secure_request = GET(
-    'https://sourceforge.net/projects/poe/',
+    'https://thirdlobe.com/',
     Connection => 'close',
   );
   $kernel->post(
