@@ -97,7 +97,6 @@ sub send_after_timeout {
 
 sub testd_client_input {
   my ($kernel, $heap, $id, $input) = @_[KERNEL, HEAP, ARG0, ARG1];
-  warn $input;
   if ($input =~ /^GET \/stream/) {
     ok(1, "got test request");
     warn length $data;
