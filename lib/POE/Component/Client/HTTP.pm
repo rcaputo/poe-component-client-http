@@ -11,7 +11,7 @@ use constant DEBUG      => 0;
 use constant DEBUG_DATA => 0;
 
 use vars qw($VERSION);
-$VERSION = '0.86_01';
+$VERSION = '0.8602';
 
 use Carp qw(croak);
 use HTTP::Response;
@@ -272,7 +272,6 @@ sub _poco_weeble_request {
     );
   }
 
-  my $cm_req_id;
   eval {
     # get a connection from Client::Keepalive
     $request->[REQ_CONN_ID] = $heap->{cm}->allocate(
