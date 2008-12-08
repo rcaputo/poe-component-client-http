@@ -182,6 +182,7 @@ sub _poco_weeble_stop {
 
   foreach my $request_rec (values %$request) {
     $request_rec->remove_timeout();
+    delete $heap->{ext_request_to_int_id}->{$request_rec->[REQ_HTTP_REQUEST]};
   }
 
   DEBUG and warn "Client::HTTP (alias=$heap->{alias}) stopped.";
@@ -285,6 +286,8 @@ sub _poco_weeble_request {
   };
   if ($@) {
     delete $heap->{request}->{$request->ID};
+    delete $heap->{ext_request_to_int_id}->{$http_request};
+
     # we can reach here for things like host being invalid.
     $request->error(400, $@);
   }
@@ -360,6 +363,7 @@ sub _poco_weeble_connect_done {
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
     $request->remove_timeout();
+    delete $heap->{ext_request_to_int_id}->{$request->[REQ_HTTP_REQUEST]};
 
     # Post an error response back to the requesting session.
     $request->connect_error("$operation error $errnum: $errstr");
@@ -492,8 +496,8 @@ sub _poco_weeble_io_error {
 
     DEBUG and warn "I/O: removing request $request_id";
     my $request = delete $heap->{request}->{$request_id};
-    delete $heap->{ext_request_to_int_id}{$request->[REQ_HTTP_REQUEST]};
     $request->remove_timeout;
+    delete $heap->{ext_request_to_int_id}{$request->[REQ_HTTP_REQUEST]};
 
     # Otherwise the remote end simply closed.  If we've got a
     # pending response, then post it back to the client.
@@ -632,8 +636,8 @@ sub _poco_weeble_io_read {
         delete $heap->{wheel_to_request}->{$wheel_id};
         if (defined $old_request) {
           DEBUG and warn "I/O: removed request $request_id";
-          delete $heap->{ext_request_to_int_id}{$old_request->[REQ_HTTP_REQUEST]};
           $old_request->remove_timeout();
+          delete $heap->{ext_request_to_int_id}{$old_request->[REQ_HTTP_REQUEST]};
           $old_request->[REQ_CONNECTION] = undef;
         }
         return;
