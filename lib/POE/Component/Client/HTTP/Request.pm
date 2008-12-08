@@ -27,7 +27,7 @@ use constant DEBUG => 0;
 use constant REQ_ID            =>  0;
 use constant REQ_POSTBACK      =>  1;
 use constant REQ_CONNECTION    =>  2;
-use constant REQ_REQUEST       =>  3;
+use constant REQ_HTTP_REQUEST  =>  3;
 use constant REQ_STATE         =>  4;
 use constant REQ_RESPONSE      =>  5;
 use constant REQ_BUFFER        =>  6;
@@ -60,7 +60,7 @@ sub import {
     if ($tag eq ':fields') {
       foreach my $sub (
         qw(
-          REQ_ID REQ_POSTBACK REQ_CONNECTION REQ_REQUEST REQ_STATE
+          REQ_ID REQ_POSTBACK REQ_CONNECTION REQ_HTTP_REQUEST REQ_STATE
           REQ_RESPONSE REQ_BUFFER REQ_OCTETS_GOT REQ_TIMER
           REQ_PROG_POSTBACK REQ_USING_PROXY REQ_HOST REQ_PORT
           REQ_HISTORY REQ_START_TIME REQ_CONN_ID
@@ -143,7 +143,7 @@ sub new {
     $request_id,        # REQ_ID
     $postback,          # REQ_POSTBACK
     undef,              # REQ_CONNECTION
-    $http_request,      # REQ_REQUEST
+    $http_request,      # REQ_HTTP_REQUEST
     RS_CONNECT,         # REQ_STATE
     undef,              # REQ_RESPONSE
     '',                 # REQ_BUFFER
@@ -219,7 +219,7 @@ sub add_eof {
   # however.
 
   if (
-    $self->[REQ_REQUEST]->method() ne "HEAD" and
+    $self->[REQ_HTTP_REQUEST]->method() ne "HEAD" and
     defined $self->[REQ_RESPONSE]->content_length and
     not defined $self->[REQ_RESPONSE]->header("Transfer-Encoding") and
     $self->[REQ_OCTETS_GOT] < $self->[REQ_RESPONSE]->content_length
@@ -448,7 +448,7 @@ sub check_redirect {
     DEBUG and warn "RED: Too much redirection";
   }
   else { # All fine, yield new request and mark this disabled.
-    my $newrequest = $self->[REQ_REQUEST]->clone();
+    my $newrequest = $self->[REQ_HTTP_REQUEST]->clone();
 
     # Sanitize new request per rt #30400.
     # TODO - What other headers are security risks?
@@ -470,7 +470,7 @@ sub send_to_wheel {
 
   $self->[REQ_STATE] = RS_SENDING;
 
-  my $http_request = $self->[REQ_REQUEST];
+  my $http_request = $self->[REQ_HTTP_REQUEST];
 
   # MEXNIX 2002-06-01: Check for proxy.  Request query is a bit
   # different...
@@ -541,7 +541,7 @@ sub error {
   );
 
   $r->content ($m);
-  $r->request ($self->[REQ_REQUEST]);
+  $r->request ($self->[REQ_HTTP_REQUEST]);
   $self->[REQ_POSTBACK]->($r);
   $self->[REQ_STATE] |= RS_POSTED;
 }
@@ -564,7 +564,7 @@ sub port { shift->[REQ_PORT] }
 sub scheme {
   my $self = shift;
 
-  $self->[REQ_USING_PROXY] ? 'http' : $self->[REQ_REQUEST]->uri->scheme;
+  $self->[REQ_USING_PROXY] ? 'http' : $self->[REQ_HTTP_REQUEST]->uri->scheme;
 }
 
 sub DESTROY {

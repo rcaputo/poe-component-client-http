@@ -99,7 +99,6 @@ sub testd_client_input {
   my ($kernel, $heap, $id, $input) = @_[KERNEL, HEAP, ARG0, ARG1];
   if ($input =~ /^GET \/stream/) {
     ok(1, "got test request");
-    warn length $data;
     $heap->{testd}->send_to_client($id, $data);
   } elsif ($input =~ /^GET \/timeout/) {
     ok(1, "got test request we will let timeout");
