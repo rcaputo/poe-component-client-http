@@ -84,7 +84,7 @@ sub _start {
     @badrequests,
   );
   
-  plan tests => @requests * 2 - @badrequests + 1;
+  plan tests => @requests * 2 - @badrequests;
 }
 
 sub testd_registered {
@@ -109,35 +109,40 @@ sub send_after_timeout {
 sub testd_client_input {
   my ($kernel, $heap, $id, $input) = @_[KERNEL, HEAP, ARG0, ARG1];
 
-  if ($input =~ /^GET \/test/) {
+  $heap->{input_buffer} .= $input;
+  my $buffer = $heap->{input_buffer};
+
+  if ($buffer =~ /^GET \/test/) {
     pass("got test request");
+    $heap->{input_buffer} = "";
     $heap->{testd}->send_to_client($id, $data);
   }
-  elsif ($input =~ /^GET \/timeout/) {
+  elsif ($buffer =~ /^GET \/timeout/) {
     pass("got test request we will let timeout");
+    $heap->{input_buffer} = "";
     $kernel->delay_add('send_after_timeout', 1.1, $id);
   }
-  elsif ($input =~ /^POST \/post.*field/s) {
+  elsif ($buffer =~ /^POST \/post1.*field.*field/s) {
     pass("got post request with content");
+    $heap->{input_buffer} = "";
     $heap->{testd}->send_to_client($id, $data);
   }
-  elsif ($input =~ /^POST \/post(\d)/) {
-    $heap->{waitforcontent} = $1;
+  elsif ($buffer =~ /^POST \/post(\d)/) {
+    if ($buffer =~ /field.*field/) {
+      pass("got content for post request with callback");
+      $heap->{input_buffer} = "";
+      $heap->{testd}->send_to_client($id, $data);
+    }
   }
-  elsif ($heap->{waitforcontent}-- and $input =~ /field/) {
-    pass("got content for post request with callback");
-    $heap->{testd}->send_to_client($id, $data);
-  }
-  elsif ($input =~ /^GET \/long/) {
+  elsif ($buffer =~ /^GET \/long/) {
     pass("sending too much data as requested");
+    $heap->{input_buffer} = "";
     $heap->{testd}->send_to_client($id, $long);
   }
   else {
     diag("INPUT: $input");
     diag("unexpected test");
   }
-
-  delete $heap->{waitforcontent} unless $heap->{waitforcontent};
 }
 
 sub got_response {
