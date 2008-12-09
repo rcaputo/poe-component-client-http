@@ -14,7 +14,7 @@ my %prereq = (
   'HTTP::Response'     => 1.37,
   'URI'                => 1.24,
   'Net::HTTP::Methods' => 0.02,
-  'POE::Component::Client::Keepalive' => 0.22,
+  'POE::Component::Client::Keepalive' => 0.25,
   'Test::POE::Server::TCP' => 0,
 );
 
