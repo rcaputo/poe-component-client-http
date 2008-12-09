@@ -242,9 +242,12 @@ sub create_request {
   }
 
   # Add a Content-Length header if this request has content but
-  # doesn't have a Content-Length header already.
+  # doesn't have a Content-Length header already.  Also, don't do it
+  # if the content is a reference, as this means we're streaming via
+  # callback.
   if (
     length($http_request->content()) and
+    !ref($http_request->content()) and
     !$http_request->content_length()
   ) {
     use bytes;
