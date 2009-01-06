@@ -1039,9 +1039,9 @@ POE::Component::Client::HTTP is an HTTP user-agent for POE.  It lets
 other sessions run while HTTP transactions are being processed, and it
 lets several HTTP transactions be processed in parallel.
 
-If POE::Component::Client::DNS is also installed, Client::HTTP will
-use it to resolve hosts without blocking.  Otherwise it will use
-gethostbyname(), which may have performance problems.
+It supports keep-alive through POE::Component::Client::Keepalive,
+which in turn uses POE::Component::Client::DNS for asynchronous name
+resolution.
 
 HTTP client components are not proper objects.  Instead of being
 created, as most objects are, they are "spawned" as separate sessions.
