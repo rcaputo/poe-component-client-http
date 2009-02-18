@@ -1207,8 +1207,48 @@ for details here.
 
 =item Timeout => $query_timeout
 
-C<Timeout> specifies the amount of time a HTTP request will wait for
-an answer.  This defaults to 180 seconds (three minutes).
+C<Timeout> sets how long POE::Component::Client::HTTP has to process
+an application's request, in seconds.  C<Timeout> defaults to 180
+(three minutes) if not specified.
+
+It's important to note that the timeout begins when the component
+receives an application's request, not when it attempts to connect to
+the web server.
+
+Timeouts may result from sending the component too many requests at
+once.  Each request would need to be received and tracked in order.
+Consider this:
+
+  $_[KERNEL]->post(component => request => ...) for (1..15_000);
+
+15,000 requests are queued together in one enormous bolus.  The
+component would receive and initialize them in order.  The first
+socket activity wouldn't arrive until the 15,000th request was set up.
+If that took longer than C<Timeout>, then the requests that have
+waited too long would fail.
+
+C<ConnectionManager>'s own timeout and concurrency limits also affect
+how many requests may be processed at once.  For example, most of the
+15,000 requests would wait in the connection manager's pool until
+sockets become available.  Meanwhile, the C<Timeout> would be counting
+down.
+
+Applications may elect to control concurrency outside the component's
+C<Timeout>.  They may do so in a few ways.
+
+The easiest way is to limit the initial number of requests to
+something more manageable.  As responses arrive, the application
+should handle them and start new requests.  This limits concurrency to
+the initial request count.
+
+An application may also outsource job throttling to another module,
+such as POE::Component::JobQueue.
+
+In any case, C<Timeout> and C<ConnectionManager> may be tuned to
+maximize timeouts and concurrency limits.  This may help in some
+cases.  Developers should be aware that doing so will increase memory
+usage.  POE::Component::Client::HTTP and KeepAlive track requests in
+memory, while applications are free to keep pending requests on disk.
 
 =back
 
