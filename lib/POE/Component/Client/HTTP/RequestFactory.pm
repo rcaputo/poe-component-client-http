@@ -306,7 +306,7 @@ sub create_request {
     Request => $http_request,
     Proxy => $proxy,
     Postback => $postback,
-    Tag => $tag,
+    #Tag => $tag, # TODO - Is this needed for anything?
     Progress => $progress_postback,
     Factory => $self,
   );

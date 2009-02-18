@@ -448,7 +448,7 @@ sub _poco_weeble_io_flushed {
   );
 
   my $request = $heap->{request}->{$request_id};
-  
+
   # Read content to send from a callback
   if ( ref $request->[REQ_HTTP_REQUEST]->content() eq 'CODE' ) {
     my $callback = $request->[REQ_HTTP_REQUEST]->content();
@@ -467,7 +467,7 @@ sub _poco_weeble_io_flushed {
       return;
     }
   }
-  
+
   $request->[REQ_STATE] ^= RS_SENDING;
   $request->[REQ_STATE] = RS_IN_HEAD;
   # XXX - Removed a second time.  The first time was in version 0.53,
@@ -1377,11 +1377,11 @@ each time it is called, and an empty string when done.  Don't forget
 to set the Content-Length header correctly.  Example:
 
   my $request = HTTP::Request->new( PUT => 'http://...' );
-  
+
   my $file = '/path/to/large_file';
-  
+
   open my $fh, '<', $file;
-  
+
   my $upload_cb = sub {
     if ( sysread $fh, my $buf, 4096 ) {
       return $buf;
@@ -1391,11 +1391,11 @@ to set the Content-Length header correctly.  Example:
       return '';
     }
   };
-  
+
   $request->content_length( -s $file );
-  
+
   $request->content( $upload_cb );
-  
+
   $kernel->post( ua => request, 'response', $request );
 
 =head1 CONTENT ENCODING AND COMPRESSION
@@ -1414,7 +1414,7 @@ use HTTP::Response's decoded_content() method rather than content():
   );
 
   # ... time passes ...
-  
+
   my $content = $response->decoded_content();
 
 The change in POE::Component::Client::HTTP behavior was prompted by
@@ -1461,7 +1461,7 @@ There is no object oriented interface.  See
 L<POE::Component::Client::Keepalive> and
 L<POE::Component::Client::DNS> for examples of a decent OO interface.
 
-=head1 AUTHOR, COPYRIGHT, & LICENSE 
+=head1 AUTHOR, COPYRIGHT, & LICENSE
 
 POE::Component::Client::HTTP is
 
