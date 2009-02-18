@@ -492,79 +492,86 @@ sub _poco_weeble_io_error {
   my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
   #K or die "!!!: unexpectedly undefined request ID" unless defined $request_id;
 
-  if ($request_id) {
+  # There was no corresponding request?  Nothing left to do here.
+  return unless $request_id;
 
-    DEBUG and warn "I/O: removing request $request_id";
-    my $request = delete $heap->{request}->{$request_id};
-    $request->remove_timeout;
-    delete $heap->{ext_request_to_int_id}{$request->[REQ_HTTP_REQUEST]};
+  DEBUG and warn "I/O: removing request $request_id";
+  my $request = delete $heap->{request}->{$request_id};
+  $request->remove_timeout;
+  delete $heap->{ext_request_to_int_id}{$request->[REQ_HTTP_REQUEST]};
 
-    # Otherwise the remote end simply closed.  If we've got a
-    # pending response, then post it back to the client.
-    DEBUG and warn "STATE is ", $request->[REQ_STATE];
+  # Otherwise the remote end simply closed.  If we've got a pending
+  # response, then post it back to the client.
+  DEBUG and warn "STATE is ", $request->[REQ_STATE];
 
-    # except when we're redirected
-    return if ($request->[REQ_STATE] & RS_REDIRECTED);
+  # Except when we're redirected.  In this case, the connection was but
+  # one step towards our destination.
+  return if ($request->[REQ_STATE] & RS_REDIRECTED);
 
-    # If there was a non-zero error, then something bad happened.  Post
-    # an error response back, if we haven't posted anything before.
-    if ($errnum) {
-      unless ($request->[REQ_STATE] & RS_POSTED) {
-        $request->error(400, "$operation error $errnum: $errstr");
-      }
-      return;
+  # If there was a non-zero error, then something bad happened.  Post
+  # an error response back, if we haven't posted anything before.
+  if ($errnum) {
+    unless ($request->[REQ_STATE] & RS_POSTED) {
+      $request->error(400, "$operation error $errnum: $errstr");
     }
-
-    if (
-      $request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and
-      not $request->[REQ_STATE] & RS_POSTED
-    ) {
-      _finish_request($heap, $request, 0);
-      return;
-    }
-    elsif ($request->[REQ_STATE] & RS_POSTED) {
-      DEBUG and warn "I/O: Disconnect, remote keepalive timeout or HTTP/1.0.";
-      return;
-    }
-    elsif (not defined $request->[REQ_RESPONSE]) {
-      # never got a response, check for pending data indicating
-      # a LF-free HTTP 0.9 response
-      my $lines = $request->wheel->get_input_filter()->get_pending();
-      my $text = join '' => @$lines;
-      DEBUG and warn "Got ", length($text), " bytes of data without LF.";
-      if ($text =~ /\S/) {
-        # generate response
-        DEBUG and warn(
-          "Generating HTTP response for HTTP/0.9 response without LF."
-        );
-        $request->[REQ_RESPONSE] = HTTP::Response->new(
-          200, 'OK', [ 'Content-Type' => 'text/html' ], $text
-        );
-        $request->[REQ_RESPONSE]->protocol('HTTP/0.9');
-        $request->[REQ_RESPONSE]->request($request->[REQ_HTTP_REQUEST]);
-        $request->[REQ_STATE] = RS_DONE;
-        $request->return_response;
-        return;
-      } else {
-        unless ($request->[REQ_STATE] & RS_POSTED) {
-          $request->error(400, "incomplete response $request_id");
-          return;
-        }
-      }
-    }
-
-    # We haven't built a proper response.  Send back an error.
-    # Changed to 406 after considering rt.cpan.org 20975.
-    #
-    # 10.4.7 406 Not Acceptable
-    #
-    # The resource identified by the request is only capable of
-    # generating response entities which have content characteristics
-    # not acceptable according to the accept headers sent in the
-    # request.
-
-    $request->error(406, "Response larger than MaxSize - $request_id");
+    return;
   }
+
+  # We seem to have finished with the request.  Send back a response.
+  if (
+    $request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and
+    not $request->[REQ_STATE] & RS_POSTED
+  ) {
+    _finish_request($heap, $request, 0);
+    return;
+  }
+
+  # We have already posted a response, so this is a remote keepalive
+  # timeout or other delayed socket shutdown.  Nothing left to do.
+  if ($request->[REQ_STATE] & RS_POSTED) {
+    DEBUG and warn "I/O: Disconnect, remote keepalive timeout or HTTP/1.0.";
+    return;
+  }
+
+  # We never received a response.
+  if (not defined $request->[REQ_RESPONSE]) {
+    # Check for pending data indicating a LF-free HTTP 0.9 response.
+    my $lines = $request->wheel->get_input_filter()->get_pending();
+    my $text = join '' => @$lines;
+    DEBUG and warn "Got ", length($text), " bytes of data without LF.";
+
+    # If we have data, build and return a response from it.
+    if ($text =~ /\S/) {
+      DEBUG and warn(
+        "Generating HTTP response for HTTP/0.9 response without LF."
+      );
+      $request->[REQ_RESPONSE] = HTTP::Response->new(
+        200, 'OK', [ 'Content-Type' => 'text/html' ], $text
+      );
+      $request->[REQ_RESPONSE]->protocol('HTTP/0.9');
+      $request->[REQ_RESPONSE]->request($request->[REQ_HTTP_REQUEST]);
+      $request->[REQ_STATE] = RS_DONE;
+      $request->return_response;
+      return;
+    }
+
+    # No data received.  This is an incomplete response.
+    $request->error(400, "Incomplete response - $request_id");
+    return;
+  }
+
+  # We haven't built a proper response, and nothing returned by the
+  # server can be turned into a proper response.  Send back an error.
+  # Changed to 406 after considering rt.cpan.org 20975.
+  #
+  # 10.4.7 406 Not Acceptable
+  #
+  # The resource identified by the request is only capable of
+  # generating response entities which have content characteristics
+  # not acceptable according to the accept headers sent in the
+  # request.
+
+  $request->error(406, "Server response is Not Acceptable - $request_id");
 }
 
 # }}} _poco_weeble_io_error
@@ -1500,3 +1507,4 @@ For questions, try the L<POE> mailing list (poe@perl.org)
 =cut
 
 # }}} POD
+# rocco // vim: ts=2 sw=2 expandtab
