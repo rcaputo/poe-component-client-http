@@ -97,11 +97,11 @@ sub testd_client_input {
   if ($input =~ /Close/) {
     $heap->{testd}->disconnect($id);
     $heap->{prevtype} = 'close';
-    my $tosend =~ s/CONNECTION/$cl/;
+    $tosend =~ s/CONNECTION/$cl/;
   } else {
     $kernel->delay('timeout', 2, $id);
     $heap->{prevtype} = 'reuse';
-    my $tosend =~ s/CONNECTION/$ka/;
+    $tosend =~ s/CONNECTION/$ka/;
   }
   $heap->{previd} = $id;
   $heap->{testd}->send_to_client($id, $tosend);

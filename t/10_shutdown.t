@@ -4,15 +4,14 @@
 
 use strict;
 
+sub DEBUG () { 0 }
+sub POE::Kernel::ASSERT_DEFAULT () { DEBUG }
+
 use HTTP::Request::Common qw(GET);
 use Test::More;
 use Test::POE::Server::TCP;
 
-sub DEBUG () { 0 }
-sub POE::Kernel::ASSERT_DEFAULT () { DEBUG }
-
 use POE qw(Component::Client::HTTP);
-
 
 plan tests => 2;
 

@@ -121,11 +121,13 @@ sub client_got_response {
     my $response_string = $http_headers->as_string();
     $response_string =~ s/^/| /mg;
 
-    warn ",", '-' x 78, "\n";
-    warn $response_string;
-    warn "`", '-' x 78, "\n";
-    warn ($chunk ? $chunk : "(undef)"), "\n";
-    warn "`", '-' x 78, "\n";
+    warn (
+      ",", '-' x 78, "\n",
+      $response_string,
+      "`", '-' x 78, "\n",
+      ($chunk ? $chunk : "(undef)"), "\n",
+      "`", '-' x 78, "\n",
+    );
   };
 
   if (defined $chunk) {

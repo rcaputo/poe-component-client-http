@@ -167,7 +167,12 @@ sub get_one {
         unshift (@{$self->[FRAMING_BUFFER]}, $chunk) if (length $chunk);
         return $retval;
       }
-      unshift (@{$self->[FRAMING_BUFFER]}, $chunk);
+      if (@{$self->[FRAMING_BUFFER]}) {
+          $self->[FRAMING_BUFFER]->[0] = $chunk . $self->[FRAMING_BUFFER]->[0];
+      } else {
+          unshift (@{$self->[FRAMING_BUFFER]}, $chunk);
+          return $retval;
+      }
     }
   }
   return $retval;

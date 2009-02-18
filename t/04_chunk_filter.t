@@ -9,7 +9,7 @@ use HTTP::Headers;
 
 sub DEBUG () { 0 }
 
-plan tests => 18;
+plan tests => 20;
 
 use_ok ('POE::Filter::HTTPChunk');
 
@@ -172,4 +172,15 @@ use_ok ('POE::Filter::HTTPChunk');
   }
   my $pending = $filter->get_pending;
   is (shift @$pending, 'garbage', "got expected pending data");
+}
+{ # extra-extra garbage at the end gets retrieved by get_pending()
+  my @input = ("9\nchunk_333\nA\nchunk_4444\n", "0\n", "7\ngarbage\n", "0\n");
+  my $filter = POE::Filter::HTTPChunk->new;
+  $filter->get_one_start( \@input );
+
+  my $output = $filter->get_one();
+  is_deeply($output, [qw/chunk_333 chunk_4444/], "got expected chunks");
+
+  my $pending = $filter->get_pending;
+  is_deeply($pending, ["7\ngarbage\n0\n"], "got expected pending data");
 }
