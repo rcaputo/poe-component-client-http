@@ -31,4 +31,5 @@ t/53_response_parser.t
 t/54_hzheng_head_redir.t
 t/55_reiss_double_resp.t
 t/56_redirect_excess.t
+t/57_pravus_progress.t
 t/58_joel_cancel_multi.t
