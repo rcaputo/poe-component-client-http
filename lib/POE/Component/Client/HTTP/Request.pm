@@ -42,14 +42,13 @@ use constant REQ_START_TIME    => 15;
 use constant REQ_FACTORY       => 16;
 use constant REQ_CONN_ID       => 17;
 
-use constant RS_CONNECT        => 0x01;
-use constant RS_SENDING        => 0x02;
-use constant RS_IN_HEAD        => 0x04;
-use constant RS_REDIRECTED     => 0x08;
-use constant RS_IN_CONTENT     => 0x20;
-use constant RS_DONE           => 0x40;
-use constant RS_POSTED         => 0x80;
-
+use constant RS_CONNECT        => 0x01; # establishing a connection
+use constant RS_SENDING        => 0x02; # sending request to server
+use constant RS_IN_HEAD        => 0x04; # waiting for or receiving headers
+use constant RS_REDIRECTED     => 0x08; # request has been redirected
+use constant RS_IN_CONTENT     => 0x20; # waiting for or receiving content
+use constant RS_DONE           => 0x40; # received full content
+use constant RS_POSTED         => 0x80; # we have posted back a response
 
 sub import {
   my ($class) = shift;
