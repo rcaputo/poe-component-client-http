@@ -39,7 +39,7 @@ use HTTP::Request::Common qw(GET POST);
 POE::Component::Client::HTTP->spawn(
   #MaxSize => MAX_BIG_REQUEST_SIZE,
   MaxSize => 200,
-  Timeout => 1,
+  Timeout => 3,
   #Protocol => 'HTTP/1.1', #default
   #ConnectionManager => $cm, #default
 );
@@ -120,7 +120,7 @@ sub testd_client_input {
   elsif ($buffer =~ /^GET \/timeout/) {
     pass("got test request we will let timeout");
     $heap->{input_buffer} = "";
-    $kernel->delay_add('send_after_timeout', 1.1, $id);
+    $kernel->delay_add('send_after_timeout', 3.3, $id);
   }
   elsif ($buffer =~ /^POST \/post1.*field.*field/s) {
     pass("got post request with content");
