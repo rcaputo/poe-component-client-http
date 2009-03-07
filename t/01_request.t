@@ -66,7 +66,7 @@ sub _start {
   );
   my $port = $_[HEAP]->{testd}->port;
   my @badrequests = (
-    GET("http://not.localhost/badhost"),
+    GET("http://not.localhost.but.invalid/badhost"),
     GET("file:///from/a/local/filesystem"),
   );
 
