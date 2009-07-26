@@ -535,6 +535,7 @@ sub error {
     . "<BODY>$nl"
     . "<H1>Error: $http_msg</H1>$nl"
     . "$message$nl"
+    . "<small>This is a client error, not a server error.</small>$nl"
     . "</BODY>$nl"
     . "</HTML>$nl"
   );
