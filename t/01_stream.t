@@ -45,7 +45,7 @@ use HTTP::Request::Common qw(GET POST);
 #my $cm = POE::Component::Client::Keepalive->new;
 POE::Component::Client::HTTP->spawn(
   Streaming => 256,
-  Timeout => 1,
+  Timeout => 2,
 );
 
 POE::Session->create(

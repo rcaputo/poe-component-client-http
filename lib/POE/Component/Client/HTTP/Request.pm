@@ -227,7 +227,7 @@ sub add_eof {
       "got " . $self->[REQ_OCTETS_GOT] . " of " .
       $self->[REQ_RESPONSE]->content_length
     );
-    #TODO: shouldn't this be 406 as per RT #20975?
+
     $self->error(
       400,
       "incomplete response b " . $self->[REQ_ID] . ".  Wanted " .
@@ -259,23 +259,29 @@ sub add_content {
   # therein.  If it's done the former, then we're safe.  Otherwise
   # we also need to C<use bytes>.
   # TODO: write test(s) for this.
+
   my $this_chunk_length = length($self->[REQ_BUFFER]);
   $self->[REQ_OCTETS_GOT] += $this_chunk_length;
 
-  my $max = $self->[REQ_FACTORY]->max_response_size;
+  my $max = $self->[REQ_FACTORY]->max_response_size();
 
   DEBUG and warn(
     "REQ: request ", $self->ID,
     " received $self->[REQ_OCTETS_GOT] bytes; maximum is $max"
   );
 
+  # Fail if we've gone over the maximum content size to return.
   if (defined $max and $self->[REQ_OCTETS_GOT] > $max) {
-    # We've gone over the maximum content size to return.  Chop it # back.
-    my $over = $self->[REQ_OCTETS_GOT] - $max;
-    $self->[REQ_OCTETS_GOT] -= $over;
-    substr($self->[REQ_BUFFER], -$over) = "";
-    #TODO: ??
-    #$self->[REQ_STATE] |= RS_DONE;
+    $self->error(
+      406,
+      "Response content is longer than specified MaxSize of $max.  " .
+      "Use range requests to retrieve specific amounts of content."
+    );
+
+    $self->[REQ_STATE] |= RS_DONE;
+    $self->[REQ_STATE] &= ~RS_IN_CONTENT;
+    $self->[REQ_CONNECTION]->close();
+    return 1;
   }
 
   # keep this for the progress callback (it gets cleared in return_response
@@ -300,16 +306,6 @@ sub add_content {
     );
   };
 
-  if (defined $max and $self->[REQ_OCTETS_GOT] >= $max) {
-    DEBUG and warn(
-      "REQ: request ", $self->ID, " has a full response... moving to done."
-    );
-    $self->[REQ_STATE] |= RS_DONE;
-    $self->[REQ_STATE] &= ~RS_IN_CONTENT;
-    $self->[REQ_CONNECTION]->close();
-    return 1;
-  }
-
   if ($self->[REQ_RESPONSE]->content_length) {
 
     # Report back progress
@@ -331,6 +327,7 @@ sub add_content {
       return 1;
     }
   }
+
   return 0;
 }
 

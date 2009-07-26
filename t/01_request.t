@@ -162,7 +162,7 @@ sub got_response {
   elsif ($request_path =~ m/\/post\d$/ and $response->code == 200) {
     pass('got 200 response for post request')
   }
-  elsif ($request_path =~ m/\/long$/ and $response->code == 400) {
+  elsif ($request_path =~ m/\/long$/ and $response->code == 406) {
     pass('got 400 response for long request')
   }
   elsif ($request_path =~ m/badhost$/ and $response->code == 500) {

@@ -16,7 +16,7 @@ use POE qw(Component::Client::HTTP);
 plan tests => 2;
 
 # Create a weeble component.
-POE::Component::Client::HTTP->spawn( Timeout => 1 );
+POE::Component::Client::HTTP->spawn( Timeout => 2 );
 
 # Create a session that will make some requests.
 POE::Session->create(

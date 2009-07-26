@@ -16,7 +16,7 @@ use Socket;
 
 POE::Component::Client::HTTP->spawn(
  Alias => 'ua',
- Timeout => 1
+ Timeout => 2,
 );
 
 # We are testing against a localhost server.
