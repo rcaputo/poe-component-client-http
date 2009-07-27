@@ -26,6 +26,12 @@ WriteMakefile(
   LICENSE      => 'perl',
   VERSION_FROM => 'lib/POE/Component/Client/HTTP.pm',
   PREREQ_PM    => \%prereq,
+  META_ADD     => {
+    resources  => {
+      license    => 'http://dev.perl.org/licenses/',
+      repository => 'http://thirdlobe.com/svn/poco-client-http/trunk'
+    },
+  },
   dist         => {
     COMPRESS   => 'gzip -9f',
     SUFFIX     => 'gz',

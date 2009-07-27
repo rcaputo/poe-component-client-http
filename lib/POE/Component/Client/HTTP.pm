@@ -1487,7 +1487,7 @@ POE::Component::Client::HTTP is
 
 =item
 
-Copyright 1999-2006 Rocco Caputo
+Copyright 1999-2009 Rocco Caputo
 
 =item
 
@@ -1511,16 +1511,17 @@ L<http://www.sapo.pt/> was kind enough to support his contributions.
 Jeff Bisbee added POD tests and documentation to pass several of them
 to version 0.79.  He's a kwalitee-increasing machine!
 
-=head1 CONTACT
+=head1 BUG TRACKER
 
-Rocco may be contacted by e-mail via L<mailto:rcaputo@cpan.org>, and
-Martijn may be contacted by email via L<mailto:martijn@cpan.org>.
+https://rt.cpan.org/Dist/Display.html?Status=Active&Queue=POE-Component-Client-HTTP
 
-The preferred way to report bugs or requests is through RT though.
-See L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=POE-Component-Client-HTTP>
-or mail L<mailto:bug-POE-Component-Client-HTTP@rt.cpan.org>
+=head1 REPOSITORY
 
-For questions, try the L<POE> mailing list (poe@perl.org)
+http://thirdlobe.com/svn/poco-client-http/
+
+=head1 OTHER RESOURCES
+
+http://search.cpan.org/dist/POE-Component-Client-HTTP/
 
 =cut
 
