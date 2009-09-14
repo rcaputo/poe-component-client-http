@@ -1,5 +1,3 @@
-# $Id$
-
 package POE::Filter::HTTPHead_Line;
 use warnings;
 use strict;
@@ -139,7 +137,7 @@ the other end of a connection as L<POE::Filter::HTTPD>
 =cut
 
 use vars qw($VERSION);
-$VERSION = '0.01';
+$VERSION = '0.890';
 
 use base qw(POE::Filter::Stackable);
 use POE::Filter::Line;

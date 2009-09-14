@@ -1,5 +1,4 @@
 #!/usr/bin/perl
-# $Id$
 # vim: filetype=perl ts=2 sw=2
 
 # Dave Davis' test case for rt.cpan.org ticket #13557:

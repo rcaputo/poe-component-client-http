@@ -1,5 +1,3 @@
-# $Id$
-
 package POE::Component::Client::HTTP::Request;
 use strict;
 use warnings;

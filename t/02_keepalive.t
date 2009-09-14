@@ -1,4 +1,3 @@
-# $Id$
 # vim: filetype=perl sts=2 sw=2
 use strict;
 

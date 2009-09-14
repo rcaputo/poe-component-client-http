@@ -1,4 +1,3 @@
-# $Id$
 # vim: filetype=perl ts=2 sw=2 tabexpand
 
 use strict;

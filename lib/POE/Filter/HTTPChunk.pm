@@ -1,5 +1,3 @@
-# $Id$
-
 package POE::Filter::HTTPChunk;
 use warnings;
 use strict;

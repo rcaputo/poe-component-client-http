@@ -1,5 +1,3 @@
-# $Id$
-
 package POE::Component::Client::HTTP;
 
 # {{{ INIT
@@ -1513,11 +1511,12 @@ to version 0.79.  He's a kwalitee-increasing machine!
 
 =head1 BUG TRACKER
 
-https://rt.cpan.org/Dist/Display.html?Status=Active&Queue=POE-Component-Client-HTTP
+https://rt.cpan.org/Dist/Display.html?Queue=POE-Component-Client-HTTP
 
 =head1 REPOSITORY
 
-http://thirdlobe.com/svn/poco-client-http/
+http://github.com/rcaputo/poe-component-client-http
+http://gitorious.org/poe-component-client-http
 
 =head1 OTHER RESOURCES
 

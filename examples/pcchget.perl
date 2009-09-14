@@ -1,5 +1,4 @@
 #!perl
-# $Id$
 
 # A short program to dump requests and responses.
 # Provided by Toby Ovod-Everett.  Thanks!

@@ -1,5 +1,4 @@
 #! /usr/bin/perl
-# $Id$
 # vim: filetype=perl sts=2 sw=2
 
 # Test case for POE::Component::Client::HTTP failing to redirect HEAD
@@ -28,7 +27,7 @@ POE::Session->create(
   }
 );
 
-                
+
 sub start {
   my ($kernel, $heap) = @_[KERNEL, HEAP];
 
@@ -65,7 +64,7 @@ EOF
   } else {
     $data = <<'EOF';
 HTTP/1.1 200 Ok
-Host: 
+Host:
 
 EOF
   }
