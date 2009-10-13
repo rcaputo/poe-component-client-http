@@ -1,74 +1,34 @@
-# vim: filetype=perl
+# vim: filetype=perl ts=2 sw=2 expandtab
 
 use strict;
 use warnings;
 
 use Test::More tests => 4;
 
-use POE qw(
-  Wheel::ReadWrite
-  Driver::SysRW
-  Filter::Line
-  Filter::Stream
-  Filter::HTTPHead
-);
-
-ok(defined $INC{"POE/Filter/HTTPHead.pm"}, "loaded");
+use_ok("POE::Filter::Line");
+use_ok("POE::Filter::HTTPHead");
 
 use IO::Handle;
 use IO::File;
 
-autoflush STDOUT 1;
+STDOUT->autoflush(1);
 my $request_number = 8;
 
-my $session = POE::Session->create(
-  inline_states => {
-    _start  => \&start,
-    input   => \&input,
-    error   => \&error,
-    flushed => \&flushed,
-  },
-);
+my $http_head_filter = POE::Filter::HTTPHead->new();
 
-POE::Kernel->run();
-exit;
-
-sub start {
-  my ($kernel, $heap) = @_[KERNEL, HEAP];
-
-  sysseek(DATA, tell(DATA), 0);
-
-  my $filter = POE::Filter::HTTPHead->new;
-
-  my $wheel = POE::Wheel::ReadWrite->new(
-    Handle      => \*DATA,
-    Driver      => POE::Driver::SysRW->new(BlockSize => 1000),
-    InputFilter => $filter,
-    InputEvent  => 'input',
-    ErrorEvent  => 'error',
-  );
-  $heap->{'wheel'} = $wheel;
+sysseek(DATA, tell(DATA), 0);
+while (<DATA>) {
+  $http_head_filter->get_one_start([ $_ ]);
 }
 
-sub input {
-  my ($kernel, $heap, $data) = @_[KERNEL, HEAP, ARG0];
+my $http_header = $http_head_filter->get_one()->[0];
+ok($http_header->isa("HTTP::Response"), "headers received");
 
-  if ($heap->{wheel}->get_input_filter->isa("POE::Filter::HTTPHead")) {
-    ok($data->isa("HTTP::Response"), "header received");
-    $heap->{wheel}->set_filter(POE::Filter::Line->new());
-    return;
-  }
+my $line_filter = POE::Filter::Line->new();
+$line_filter->get_one_start( $http_head_filter->get_pending() || [] );
 
-  ok($data eq "Test Content.", "content received");
-}
-
-sub error {
-  my $heap = $_[HEAP];
-  my ($type, $errno, $errmsg, $id) = @_[ARG0..$#_];
-
-  is($errno, 0, "got EOF");
-  delete $heap->{wheel};
-}
+my $line_data = $line_filter->get_one()->[0];
+is($line_data, "Test Content.", "content received");
 
 # Below is an HTTP response that consists solely of a status line and
 # some content.
