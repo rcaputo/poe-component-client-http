@@ -8,12 +8,12 @@ use ExtUtils::MakeMaker;
 open(CHANGES, ">>CHANGES") and close CHANGES;
 
 my %prereq = (
-  'POE'                => 1.007,
+  'POE'                => 1.280,
   'HTTP::Request'      => 1.30,
   'HTTP::Response'     => 1.37,
   'URI'                => 1.24,
   'Net::HTTP::Methods' => 0.02,
-  'POE::Component::Client::Keepalive' => 0.260,
+  'POE::Component::Client::Keepalive' => 0.261,
   'Test::POE::Server::TCP' => 0,
 );
 
