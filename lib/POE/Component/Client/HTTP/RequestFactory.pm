@@ -19,7 +19,7 @@ use constant FCT_TIMEOUT         => 9;
 use constant DEBUG               => 0;
 use constant DEFAULT_BLOCK_SIZE  => 4096;
 
-our $VERSION = "0.891";
+our $VERSION = "0.892";
 
 =head1 CONSTRUCTOR
 

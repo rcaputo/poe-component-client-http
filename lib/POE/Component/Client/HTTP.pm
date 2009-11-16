@@ -9,7 +9,7 @@ use constant DEBUG      => 0;
 use constant DEBUG_DATA => 0;
 
 use vars qw($VERSION);
-$VERSION = '0.891';
+$VERSION = '0.892';
 
 use Carp qw(croak);
 use HTTP::Response;

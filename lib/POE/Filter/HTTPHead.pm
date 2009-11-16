@@ -137,7 +137,7 @@ the other end of a connection as L<POE::Filter::HTTPD>
 =cut
 
 use vars qw($VERSION);
-$VERSION = '0.891';
+$VERSION = '0.892';
 
 use base qw(POE::Filter::Stackable);
 use POE::Filter::Line;
