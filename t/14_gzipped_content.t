@@ -21,8 +21,11 @@ use POE::Component::Server::TCP;
 
 use Net::HTTP::Methods;
 
-if (Net::HTTP::Methods::zlib_ok()) {
-  plan tests => 1;
+if (
+	eval { Net::HTTP::Methods::zlib_ok() } or
+	eval { Net::HTTP::Methods::gunzip_ok() }
+) {
+	plan tests => 1;
 }
 else {
   plan skip_all => 'Compress::Zlib no present';
