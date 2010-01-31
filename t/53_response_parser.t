@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# vim: filetype=perl
+# vim: filetype=perl ts=2 sw=2 expandtab
 
 # Generic response parser testing, especially for cases where
 # POE::Component::Client::HTTP generates the wrong response.
@@ -14,7 +14,7 @@ use HTTP::Request::Common 'GET';
 sub DEBUG () { 0 }
 
 # The number of tests must match scalar(@tests).
-use Test::More tests => 4;
+use Test::More tests => 5;
 
 use POE;
 use POE::Component::Client::HTTP;
@@ -42,6 +42,12 @@ my @tests = (
     ),
     sub {
       my $response = shift;
+
+      ok(
+        $response->header("X-PCCH-Peer") =~ /^127\.0\.0\.1.\d+$/,
+        "peer address header"
+      );
+
       ok(
         $response->code() == 200 &&
         $response->header("Transfer-Encoding") eq "poit, narf",

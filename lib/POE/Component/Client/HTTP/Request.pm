@@ -1,4 +1,6 @@
 package POE::Component::Client::HTTP::Request;
+# vim: ts=2 sw=2 expandtab
+
 use strict;
 use warnings;
 
@@ -39,6 +41,7 @@ use constant REQ_HISTORY       => 14;
 use constant REQ_START_TIME    => 15;
 use constant REQ_FACTORY       => 16;
 use constant REQ_CONN_ID       => 17;
+use constant REQ_PEERNAME      => 18;
 
 use constant RS_CONNECT        => 0x01; # establishing a connection
 use constant RS_SENDING        => 0x02; # sending request to server
@@ -60,7 +63,7 @@ sub import {
           REQ_ID REQ_POSTBACK REQ_CONNECTION REQ_HTTP_REQUEST REQ_STATE
           REQ_RESPONSE REQ_BUFFER REQ_OCTETS_GOT REQ_TIMER
           REQ_PROG_POSTBACK REQ_USING_PROXY REQ_HOST REQ_PORT
-          REQ_HISTORY REQ_START_TIME REQ_CONN_ID
+          REQ_HISTORY REQ_START_TIME REQ_CONN_ID REQ_PEERNAME
         )
       ) {
         no strict 'refs';
@@ -155,6 +158,7 @@ sub new {
     time(),             # REQ_START_TIME
     $factory,           # REQ_FACTORY
     undef,              # REQ_CONN_ID
+    undef,              # REQ_PEERNAME
   ];
   return bless $self, $class;
 }

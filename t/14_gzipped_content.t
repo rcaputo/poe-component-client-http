@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# vim: filetype=perl
+# vim: filetype=perl ts=2 sw=2 expandtab
 
 # Test gzip'd content encoding.
 
@@ -22,10 +22,10 @@ use POE::Component::Server::TCP;
 use Net::HTTP::Methods;
 
 if (
-	eval { Net::HTTP::Methods::zlib_ok() } or
-	eval { Net::HTTP::Methods::gunzip_ok() }
+  eval { Net::HTTP::Methods::zlib_ok() } or
+  eval { Net::HTTP::Methods::gunzip_ok() }
 ) {
-	plan tests => 1;
+  plan tests => 1;
 }
 else {
   plan skip_all => 'Compress::Zlib no present';

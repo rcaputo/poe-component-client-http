@@ -9,11 +9,12 @@ use constant DEBUG      => 0;
 use constant DEBUG_DATA => 0;
 
 use vars qw($VERSION);
-$VERSION = '0.893';
+$VERSION = '0.894';
 
 use Carp qw(croak);
 use HTTP::Response;
 use Net::HTTP::Methods;
+use Socket qw(sockaddr_in inet_ntoa);
 
 use POE::Component::Client::HTTP::RequestFactory;
 use POE::Component::Client::HTTP::Request qw(:states :fields);
@@ -339,6 +340,16 @@ sub _poco_weeble_connect_done {
     $heap->{wheel_to_request}->{ $new_wheel->ID() } = $request_id;
 
     $request->[REQ_CONNECTION] = $connection;
+
+    my $peer_addr = getpeername($new_wheel->get_input_handle());
+    if (defined $peer_addr) {
+      my ($port, $iaddr) = sockaddr_in($peer_addr);
+      $request->[REQ_PEERNAME] = inet_ntoa($iaddr) . "." . $port;
+    }
+    else {
+      $request->[REQ_PEERNAME] = "error:$!";
+    }
+
     $request->create_timer($heap->{factory}->timeout);
     $request->send_to_wheel;
   }
@@ -545,7 +556,10 @@ sub _poco_weeble_io_error {
         "Generating HTTP response for HTTP/0.9 response without LF."
       );
       $request->[REQ_RESPONSE] = HTTP::Response->new(
-        200, 'OK', [ 'Content-Type' => 'text/html' ], $text
+        200, 'OK', [
+          'Content-Type'  => 'text/html',
+          'X-PCCH-Peer'   => $request->[REQ_PEERNAME],
+        ], $text
       );
       $request->[REQ_RESPONSE]->protocol('HTTP/0.9');
       $request->[REQ_RESPONSE]->request($request->[REQ_HTTP_REQUEST]);
@@ -625,6 +639,7 @@ sub _poco_weeble_io_read {
     # FIXME: This happens when the response is HTTP/0.9 and doesn't
     # include a status line.  See t/53_response_parser.t.
     $request->[REQ_RESPONSE] = $input;
+    $input->header("X-PCCH-Peer", $request->[REQ_PEERNAME]);
 
     # Some responses are without content by definition
     # FIXME: #12363
@@ -1445,6 +1460,26 @@ For more information about the problem and discussions regarding the
 solution, see:
 L<http://www.perlmonks.org/?node_id=683833> and
 L<http://rt.cpan.org/Ticket/Display.html?id=35538>
+
+=head1 CLIENT HEADERS
+
+POE::Component::Client::HTTP sets its own response headers with
+additional information.  All of its headers begin with "X-PCCH".
+
+=head2 X-PCCH-Peer
+
+X-PCCH-Peer contains the remote IPv4 address and port, separated by a
+period.  For example, "127.0.0.1.8675" represents port 8675 on
+localhost.
+
+Proxying will render X-PCCH-Peer nearly useless, since the socket will
+be connected to a proxy rather than the server itself.
+
+This feature was added at Doreen Grey's request.  Doreen wanted a
+means to find the remote server's address without having to make an
+additional request.
+
+Patches for IPv6 support are welcome.
 
 =head1 ENVIRONMENT
 
