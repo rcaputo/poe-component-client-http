@@ -11,7 +11,7 @@ sub CURRENT_STATE    () { 1 }
 sub WORK_RESPONSE    () { 2 }
 sub PROTOCOL_VERSION () { 3 }
 
-sub STATE_STATUS () { 0x00 }  # waiting for a status line
+sub STATE_STATUS () { 0x01 }  # waiting for a status line
 sub STATE_HEADER () { 0x02 }  # gotten status, looking for header or end
 
 sub DEBUG () { 0 }
@@ -32,6 +32,11 @@ sub new {
 sub get_one_start {
   my ($self, $chunks) = @_;
 
+	# We're receiving newline-terminated lines.  Strip off any carriage
+	# returns that might be left over.
+	s/\x0D$// foreach @$chunks;
+	s/^\x0D// foreach @$chunks;
+
   push (@{$self->[FRAMING_BUFFER]}, @$chunks);
   #warn "now got ", scalar @{$self->[FRAMING_BUFFER]}, " lines";
 }
@@ -39,58 +44,90 @@ sub get_one_start {
 sub get_one {
   my $self = shift;
 
-  #warn "in get_one";
-  while (defined (my $line = shift (@{$self->[FRAMING_BUFFER]}))) {
-    DEBUG and warn "LINE $line";
-    if ($self->[CURRENT_STATE] == STATE_STATUS) {
-      DEBUG and warn "in status";
-      # Expect a status line.
-      if ($line =~ m|^(?:HTTP/(\d+\.\d+) )?(\d{3})\s*(.+)?$|) {
-        $self->[PROTOCOL_VERSION] = $1 if defined $1;
-        $self->[WORK_RESPONSE] = HTTP::Response->new ($2, $3);
-        $self->[WORK_RESPONSE]->protocol('HTTP/' . $self->[PROTOCOL_VERSION]);
-        $self->[CURRENT_STATE] = STATE_HEADER;
-      }
-      else {
-        # assume HTTP/0.9
-        my $resp = HTTP::Response->new (
-          '200', 'OK', ['Content-Type' => 'text/html'], $line
-        );
-        $resp->protocol('HTTP/0.9');
-        return [ $resp ];
-      }
-    }
-    else {
-      if ($line eq '') {
-        $self->[CURRENT_STATE] = STATE_STATUS;
-        DEBUG and warn "return response";
-        return [$self->[WORK_RESPONSE]];
-      }
-      DEBUG and warn "in headers";
-      unless (@{$self->[FRAMING_BUFFER]} > 0) {
-        unshift (@{$self->[FRAMING_BUFFER]}, $line);
-        return [];
-      }
-      DEBUG and warn "got more lines";
-      while ($self->[FRAMING_BUFFER]->[0] && $self->[FRAMING_BUFFER]->[0] =~ /^[\t ]/) {
-        my $next_line = shift (@{$self->[FRAMING_BUFFER]});
-        $next_line =~ s/^[\t ]+//;
-        $line .= $next_line;
-      }
-      #warn "unfolded one: $line";
-      if (
-        $line =~ m{
-        ^
-        ([^\x00-\x19()<>@,;:\\""\/\[\]\?={}\x20\t]+):
-        \s*([^\x00-\x07\x09-\x19]+)
-        $
-        }x
-      ) {
-        $self->[WORK_RESPONSE]->push_header($1, $2)
-      }
-    }
-  }
-  return [];
+	# Process lines while we have them.
+	LINE: while (@{$self->[FRAMING_BUFFER]}) {
+		my $line = shift @{$self->[FRAMING_BUFFER]};
+
+		# Waiting for a status line.
+		if ($self->[CURRENT_STATE] == STATE_STATUS) {
+			DEBUG and warn "----- Waiting for a status line.\n";
+
+			# Does the line look like a status line?
+			if ($line =~ m|^(?:HTTP/(\d+\.\d+) )?(\d{3})\s*(.+)?$|) {
+				$self->[PROTOCOL_VERSION] = $1 if defined $1;
+				$self->[WORK_RESPONSE] = HTTP::Response->new ($2, $3);
+				$self->[WORK_RESPONSE]->protocol('HTTP/' . $self->[PROTOCOL_VERSION]);
+				$self->[CURRENT_STATE] = STATE_HEADER;
+
+				# We're done with the line.  Try the next one.
+				DEBUG and warn "Got a status line.\n";
+				next LINE;
+			}
+
+			# We have a line, but it doesn't look like a HTTP/1.1 status
+			# line.  Assume it's an HTTP/0.9 response and fabricate headers.
+			# Also, put the line back.  It's part of the content.
+			DEBUG and warn "Faking HTTP/0.9 headers (first line not status).\n";
+			my $resp = HTTP::Response->new (
+				'200', 'OK', ['Content-Type' => 'text/html'], $line
+			);
+			$resp->protocol('HTTP/0.9');
+			#unshift @{$self->[FRAMING_BUFFER]}, $line;
+			return [ $resp ];
+		}
+
+		# A blank line signals the end of headers.
+		if ($line =~ /^\s*$/) {
+			DEBUG and warn "Got a blank line.  End of headers.\n";
+			$self->[CURRENT_STATE] = STATE_STATUS;
+			return [$self->[WORK_RESPONSE]];
+		}
+
+		# We have a potential header line.  Try to identify it's end.
+		my $i = 0;
+		CONTINUATION: while ($i < @{$self->[FRAMING_BUFFER]}) {
+			# Forward-looking line begins with whitespace.  It's a
+			# continuation of the previous line.
+			$i++, next CONTINUATION if $self->[FRAMING_BUFFER]->[$i] =~ /^\s+\S/;
+
+			DEBUG and warn "Found end of header ($i)\n";
+
+			# Forward-looking line isn't a continuation line.  All buffer
+			# lines before it are part of the current header.
+			if ($i) {
+				$line .= $_ foreach (
+					map { s/^\s+//; $_ }
+					splice(@{$self->[FRAMING_BUFFER]}, 0, $i)
+				);
+			}
+
+			DEBUG and warn "Full header read: $line\n";
+
+			# And parse the line.
+			if (
+				$line =~ m{
+					^
+					([^\x00-\x19()<>@,;:\\""\/\[\]\?={}\x20\t]+):
+					\s*([^\x00-\x07\x09-\x19]+)
+					$
+				}x
+			) {
+				DEBUG and warn "  header($1) value($2)\n";
+				$self->[WORK_RESPONSE]->push_header($1, $2)
+			}
+
+			next LINE;
+		}
+
+		# We didn't find a complete header.  Put the line back, and wait
+		# for more input.
+		DEBUG and warn "Incomplete header. Waiting for more.\n";
+		unshift @{$self->[FRAMING_BUFFER]}, $line;
+		return [];
+	}
+
+	# Didn't return anything else, so we don't have anything.
+	return [];
 }
 
 #=for future
@@ -152,9 +189,12 @@ returns a shiny new POE::Filter::HTTPHead object.
 sub new {
   my $type = shift;
 
+	# Look for EOL defined as linefeed.  We'll strip off possible
+	# carriage returns in HTTPHead_Line's get_one_start().
+
   my $self = $type->SUPER::new(
     Filters => [
-      POE::Filter::Line->new,
+      POE::Filter::Line->new(Literal => "\x0A"),
       POE::Filter::HTTPHead_Line->new,
     ],
   );
