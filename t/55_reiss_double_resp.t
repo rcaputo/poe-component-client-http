@@ -179,7 +179,10 @@ POE::Session->create(
 
       if ($case->{number} == 1) {
         # Case 1 redirects to a dead port.  We should get a 400.
-        is($response->code, 500, "case 1 redirect to dead server returns 500");
+        ok(
+          ($response->code == 500) || ($response->code == 408),
+          "case 1 redirect to dead server returns 500"
+        );
       }
       elsif ($case->{number} == 2) {
         if ($case->{tries_left} == 2) {
@@ -208,7 +211,10 @@ POE::Session->create(
       }
 
       # We're done if no cases remain.
-      return unless @cases;
+      unless (@cases) {
+        $_[KERNEL]->post(weeble => 'shutdown');
+        return;
+      }
 
       # Next case, please.
       $case = shift @cases;
