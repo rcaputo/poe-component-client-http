@@ -167,7 +167,7 @@ sub _poco_weeble_start {
   # have to do this here because it wants a current_session
   $heap->{cm} = POE::Component::Client::Keepalive->new(
     timeout => $heap->{factory}->timeout,
-    $heap->{bind_addr} ? (bind_address => $heap->{bind_addr}) : (),
+    ($heap->{bind_addr} ? (bind_address => $heap->{bind_addr}) : ()),
   ) unless ($heap->{cm});
 }
 
@@ -1079,8 +1079,8 @@ other sessions run while HTTP transactions are being processed, and it
 lets several HTTP transactions be processed in parallel.
 
 It supports keep-alive through POE::Component::Client::Keepalive,
-which in turn uses POE::Component::Client::DNS for asynchronous name
-resolution.
+which in turn uses POE::Component::Resolver for asynchronous IPv4 and
+IPv6 name resolution.
 
 HTTP client components are not proper objects.  Instead of being
 created, as most objects are, they are "spawned" as separate sessions.
@@ -1138,7 +1138,9 @@ not have done this already.
     # ...
   );
 
-See L<POE::Component::Client::Keepalive> for more information.
+See L<POE::Component::Client::Keepalive> for more information,
+including how to alter the connection manager's resolver
+configuration (for example, to force IPv6 or prefer it before IPv4).
 
 =item CookieJar => $cookie_jar
 
@@ -1511,7 +1513,7 @@ Secure HTTP (https) proxying is not supported at this time.
 
 There is no object oriented interface.  See
 L<POE::Component::Client::Keepalive> and
-L<POE::Component::Client::DNS> for examples of a decent OO interface.
+L<POE::Component::Resolver> for examples of a decent OO interface.
 
 =head1 AUTHOR, COPYRIGHT, & LICENSE
 

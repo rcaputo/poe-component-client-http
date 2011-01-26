@@ -27,12 +27,15 @@ use HTTP::Response;
 BEGIN {
   delete $ENV{HTTP_PROXY};
   for (qw /HTTP_PROXY http_proxy NO_PROXY no_proxy/) {
-  delete $ENV{$_};
+    delete $ENV{$_};
   }
 }
 
 POE::Session->create(
    inline_states => {
+    _child => sub { undef },
+    _stop => sub { undef },
+
     _start => sub {
       my $kernel = $_[KERNEL];
       $kernel->alias_set('main');
@@ -173,6 +176,9 @@ POE::Session->create(
       $kernel->post(proxy2 => 'shutdown');
       $kernel->post(rproxy => 'shutdown');
       $kernel->post(host => 'shutdown');
+
+      $kernel->post(DefProxy => 'shutdown');
+      $kernel->post(NoProxy => 'shutdown');
     }
   },
   heap => {

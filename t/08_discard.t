@@ -60,11 +60,13 @@ POE::Session->create(
       $kernel->delay('no_response'); # Clear timer
       ok($rsp->code == 408, "received error " . $rsp->code . " (wanted 408)");
       $kernel->post(Discard => 'shutdown');
+      $kernel->post(ua => 'shutdown');
     },
     no_response => sub {
       my $kernel = $_[KERNEL];
       fail("didn't receive error 408");
       $kernel->post(Discard => 'shutdown');
+      $kernel->post(ua => 'shutdown');
     }
   }
 );
