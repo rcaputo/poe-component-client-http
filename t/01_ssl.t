@@ -13,6 +13,10 @@ unless (grep /SSLify/, keys %INC) {
   plan skip_all => 'Need POE::Component::SSLify to test SSL';
 }
 
+if ( $^O eq 'MSWin32' ) {
+  plan skip_all => 'POE::Component::SSLify does not work on MSWin32. Please help the author if you can fix this!';
+}
+
 plan tests => 1;
 
 $| = 1;
