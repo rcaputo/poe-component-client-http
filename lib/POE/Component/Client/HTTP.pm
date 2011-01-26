@@ -343,8 +343,15 @@ sub _poco_weeble_connect_done {
 
     my $peer_addr = getpeername($new_wheel->get_input_handle());
     if (defined $peer_addr) {
-      my ($port, $iaddr) = sockaddr_in($peer_addr);
-      $request->[REQ_PEERNAME] = inet_ntoa($iaddr) . "." . $port;
+      # TODO - Kludge.  How to identify IP address family?
+      if (length($peer_addr) == 16) {
+        my ($port, $iaddr) = sockaddr_in($peer_addr);
+        $request->[REQ_PEERNAME] = inet_ntoa($iaddr) . "." . $port;
+      }
+      else {
+        my ($port, $iaddr) = Socket6::unpack_sockaddr_in6($peer_addr);
+        $request->[REQ_PEERNAME] = Socket6::inet_ntop(AF_INET6, $iaddr) . "." . $port;
+      }
     }
     else {
       $request->[REQ_PEERNAME] = "error:$!";
