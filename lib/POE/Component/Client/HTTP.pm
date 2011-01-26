@@ -15,6 +15,7 @@ use Carp qw(croak);
 use HTTP::Response;
 use Net::HTTP::Methods;
 use Socket qw(sockaddr_in inet_ntoa);
+use Socket6 qw(AF_INET6 unpack_sockaddr_in6 inet_ntop);
 
 use POE::Component::Client::HTTP::RequestFactory;
 use POE::Component::Client::HTTP::Request qw(:states :fields);
@@ -349,8 +350,8 @@ sub _poco_weeble_connect_done {
         $request->[REQ_PEERNAME] = inet_ntoa($iaddr) . "." . $port;
       }
       else {
-        my ($port, $iaddr) = Socket6::unpack_sockaddr_in6($peer_addr);
-        $request->[REQ_PEERNAME] = Socket6::inet_ntop(AF_INET6, $iaddr) . "." . $port;
+        my ($port, $iaddr) = unpack_sockaddr_in6($peer_addr);
+        $request->[REQ_PEERNAME] = inet_ntop(AF_INET6, $iaddr) . "." . $port;
       }
     }
     else {
