@@ -342,7 +342,15 @@ sub _poco_weeble_connect_done {
 
     $request->[REQ_CONNECTION] = $connection;
 
-    my $peer_addr = getpeername($new_wheel->get_input_handle());
+    # SSLify needs us to call it's function to get the "real" socket
+    my $peer_addr;
+    if ( $request->scheme eq 'http' ) {
+      $peer_addr = getpeername($new_wheel->get_input_handle());
+    } else {
+      my $socket = $new_wheel->get_input_handle();
+      $peer_addr = getpeername(POE::Component::SSLify::SSLify_GetSocket($socket));
+    }
+
     if (defined $peer_addr) {
       # TODO - Kludge.  How to identify IP address family?
       if (length($peer_addr) == 16) {
