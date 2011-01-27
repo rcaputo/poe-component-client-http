@@ -537,8 +537,8 @@ sub error {
 
   my $nl = "\n";
 
-  my $r = HTTP::Response->new($code, [ 'X-PCCH-Errmsg', $message ]);
   my $http_msg = status_message($code);
+  my $r = HTTP::Response->new($code, $http_msg, [ 'X-PCCH-Errmsg', $message ]);
   my $m = (
     "<html>$nl"
     . "<HEAD><TITLE>Error: $http_msg</TITLE></HEAD>$nl"
@@ -550,8 +550,8 @@ sub error {
     . "</HTML>$nl"
   );
 
-  $r->content ($m);
-  $r->request ($self->[REQ_HTTP_REQUEST]);
+  $r->content($m);
+  $r->request($self->[REQ_HTTP_REQUEST]);
   $self->[REQ_POSTBACK]->($r);
   $self->[REQ_STATE] |= RS_POSTED;
 }
