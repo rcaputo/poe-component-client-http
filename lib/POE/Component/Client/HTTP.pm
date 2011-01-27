@@ -16,7 +16,6 @@ use HTTP::Response;
 use Net::HTTP::Methods;
 use Socket qw(sockaddr_in inet_ntoa);
 use Socket6 qw(AF_INET6 unpack_sockaddr_in6 inet_ntop);
-use Errno qw(ETIMEDOUT);
 
 use POE::Component::Client::HTTP::RequestFactory;
 use POE::Component::Client::HTTP::Request qw(:states :fields);
@@ -392,7 +391,7 @@ sub _poco_weeble_connect_done {
     delete $heap->{ext_request_to_int_id}->{$request->[REQ_HTTP_REQUEST]};
 
     # Post an error response back to the requesting session.
-    $request->connect_error("$operation error $errnum: $errstr");
+    $request->connect_error($operation, $errnum, $errstr);
   }
 }
 
@@ -538,8 +537,8 @@ sub _poco_weeble_io_error {
   # If there was a non-zero error, then something bad happened.  Post
   # an error response back, if we haven't posted anything before.
   if ($errnum) {
-    if ($operation eq "connect" and $errnum == ETIMEDOUT) {
-      $request->error(408, "$operation error $errnum: $errstr");
+    if ($operation eq "connect") {
+      $request->connect_error($operation, $errnum, $errstr);
       return;
     }
 

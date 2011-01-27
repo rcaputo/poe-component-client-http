@@ -8,6 +8,7 @@ use POE;
 
 use Carp;
 use HTTP::Status;
+use Errno qw(ETIMEDOUT);
 
 BEGIN {
   local $SIG{'__DIE__'} = 'DEFAULT';
@@ -557,13 +558,21 @@ sub error {
 }
 
 sub connect_error {
-  my ($self, $message) = @_;
+  my ($self, $operation, $errnum, $errstr) = @_;
 
   my $host = $self->[REQ_HOST];
   my $port = $self->[REQ_PORT];
 
-  $message = "Cannot connect to $host:$port ($message)";
-  $self->error (RC_INTERNAL_SERVER_ERROR, $message);
+  if ($operation eq "connect" and $errnum == ETIMEDOUT) {
+    $self->error(408, "Connection to $host:$port failed: timeout");
+  }
+  else {
+    $self->error(
+      RC_INTERNAL_SERVER_ERROR,
+      "Connection to $host:$port failed: $operation error $errnum: $errstr"
+    );
+  }
+
   return;
 }
 
