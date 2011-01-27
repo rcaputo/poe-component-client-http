@@ -16,6 +16,7 @@ use HTTP::Response;
 use Net::HTTP::Methods;
 use Socket qw(sockaddr_in inet_ntoa);
 use Socket6 qw(AF_INET6 unpack_sockaddr_in6 inet_ntop);
+use Errno qw(ETIMEDOUT);
 
 use POE::Component::Client::HTTP::RequestFactory;
 use POE::Component::Client::HTTP::Request qw(:states :fields);
@@ -537,6 +538,11 @@ sub _poco_weeble_io_error {
   # If there was a non-zero error, then something bad happened.  Post
   # an error response back, if we haven't posted anything before.
   if ($errnum) {
+    if ($operation eq "connect" and $errnum == ETIMEDOUT) {
+      $request->error(408, "$operation error $errnum: $errstr");
+      return;
+    }
+
     unless ($request->[REQ_STATE] & RS_POSTED) {
       $request->error(400, "$operation error $errnum: $errstr");
     }
@@ -1483,6 +1489,15 @@ L<http://rt.cpan.org/Ticket/Display.html?id=35538>
 
 POE::Component::Client::HTTP sets its own response headers with
 additional information.  All of its headers begin with "X-PCCH".
+
+=head2 X-PCCH-Errmsg
+
+POE::Component::Client::HTTP may fail because of an internal client
+error rather than an HTTP protocol error.  X-PCCH-Errmsg will contain a
+human readable reason for client failures, should they occur.
+
+The text of X-PCCH-Errmsg may also be repeated in the response's
+content.
 
 =head2 X-PCCH-Peer
 

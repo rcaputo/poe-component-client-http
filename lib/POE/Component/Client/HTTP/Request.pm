@@ -429,11 +429,12 @@ sub check_redirect {
   # Make sure to frob any cookies set.  Redirect cookies are cookies, too!
   $self->[REQ_FACTORY]->frob_cookies($self->[REQ_RESPONSE]);
 
-  my $new_uri = $self->[REQ_RESPONSE]->header ('Location');
-  DEBUG and warn "REQ: Preparing redirect to $new_uri";
+  my $location_uri = $self->[REQ_RESPONSE]->header('Location');
+
+  DEBUG and warn "REQ: Preparing redirect to $location_uri";
   my $base = $self->[REQ_RESPONSE]->base();
-  $new_uri = URI->new($new_uri, $base)->abs($base);
-  DEBUG and warn "RED: Actual redirect uri is $new_uri";
+  $location_uri = URI->new($location_uri, $base)->abs($base);
+  DEBUG and warn "RED: Actual redirect uri is $location_uri";
 
   my $prev = $self;
   my $history = 0;
@@ -453,8 +454,18 @@ sub check_redirect {
     $newrequest->remove_header('Cookie');
 
     DEBUG and warn "RED: new request $newrequest";
-    $newrequest->uri($new_uri);
-    _set_host_header ($newrequest);
+    $newrequest->uri($location_uri);
+
+    # Don't change the Host header on a relative redirect.  This
+    # allows the HTTP::Request's Host to remain intact, per
+    # rt.cpan.org #63990.
+    if (defined $location_uri->scheme()) {
+      DEBUG and warn "RED: redirecting to absolute location $location_uri";
+      _set_host_header($newrequest);
+    }
+    else {
+      DEBUG and warn "RED: no new Host for relative redirect to $location_uri";
+    }
 
     $self->[REQ_STATE] = RS_REDIRECTED;
     DEBUG and warn "RED: new request $newrequest";
@@ -526,8 +537,8 @@ sub error {
 
   my $nl = "\n";
 
-  my $r = HTTP::Response->new($code);
-  my $http_msg = status_message ($code);
+  my $r = HTTP::Response->new($code, [ 'X-PCCH-Errmsg', $message ]);
+  my $http_msg = status_message($code);
   my $m = (
     "<html>$nl"
     . "<HEAD><TITLE>Error: $http_msg</TITLE></HEAD>$nl"
