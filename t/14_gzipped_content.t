@@ -66,6 +66,8 @@ GZIP: {
   use constant OSCODE  => 3 ;
   use constant MIN_HDR_SIZE => 10 ; # minimum gzip header size
 
+  use bytes;
+
   # Create the first outgoing portion of the content:
 
   my $gzipHeader = pack(
@@ -127,6 +129,7 @@ BEGIN {
 {
   foreach (@tests) {
     POE::Component::Server::TCP->new(
+      Alias               => "server_$_",
       Address             => "127.0.0.1",
       Port                => 0,
       Started             => \&register_port,
@@ -181,9 +184,16 @@ POE::Session->create(
       my $test     = $tests[$test_number][1];
       $test->($response);
 
-      $_[KERNEL]->yield("run_next_test") if ++$test_number < @tests;
+      $_[KERNEL]->post("server_$tests[$test_number]", "shutdown");
+
+      if (++$test_number < @tests) {
+        $_[KERNEL]->yield("run_next_test");
+      }
+      else {
+        $_[KERNEL]->post("weeble", "shutdown");
+      }
     },
-    _stop => sub { exit },  # Nasty but expedient.
+    _stop => sub { undef },
   }
 );
 
