@@ -36,6 +36,7 @@ sub fix_response {
 # Spawn one server per test response.
 {
   POE::Component::Server::TCP->new(
+		Alias               => "tcp_server",
     Address             => "127.0.0.1",
     Port                => 0,
     Started             => \&register_port,
@@ -89,8 +90,16 @@ POE::Session->create(
 
       $_[KERNEL]->delay(dummy => 1.0); # so we can get any belated stupidity
     },
-    dummy=> sub { },
-    _stop => sub { is(1, $_[HEAP]->{response_num}, 'correct number of responses recieved'); exit },  # Nasty but expedient.
+    dummy=> sub {
+      $_[KERNEL]->post("tcp_server", "shutdown");
+			$_[KERNEL]->post("weeble", "shutdown");
+		},
+    _stop => sub {
+			is(
+				1, $_[HEAP]->{response_num},
+				'correct number of responses recieved'
+			);
+		},
   }
 );
 
