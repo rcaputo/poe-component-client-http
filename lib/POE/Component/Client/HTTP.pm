@@ -15,7 +15,6 @@ use Carp qw(croak);
 use HTTP::Response;
 use Net::HTTP::Methods;
 use Socket qw(sockaddr_in inet_ntoa);
-use Socket6 qw(AF_INET6 unpack_sockaddr_in6 inet_ntop);
 
 use POE::Component::Client::HTTP::RequestFactory;
 use POE::Component::Client::HTTP::Request qw(:states :fields);
@@ -29,6 +28,8 @@ BEGIN {
     Time::HiRes->import("time");
   };
 }
+
+use Socket::GetAddrInfo qw(:newapi getnameinfo NI_NUMERICHOST NI_NUMERICSERV);
 
 use POE qw(
   Driver::SysRW Filter::Stream
@@ -352,18 +353,19 @@ sub _poco_weeble_connect_done {
     }
 
     if (defined $peer_addr) {
-      # TODO - Kludge.  How to identify IP address family?
-      if (length($peer_addr) == 16) {
-        my ($port, $iaddr) = sockaddr_in($peer_addr);
-        $request->[REQ_PEERNAME] = inet_ntoa($iaddr) . "." . $port;
+      my ($error, $address, $port) = getnameinfo(
+        $peer_addr, NI_NUMERICHOST | NI_NUMERICSERV
+      );
+
+      if ($error) {
+        $request->[REQ_PEERNAME] = "error: $error";
       }
       else {
-        my ($port, $iaddr) = unpack_sockaddr_in6($peer_addr);
-        $request->[REQ_PEERNAME] = inet_ntop(AF_INET6, $iaddr) . "." . $port;
+        $request->[REQ_PEERNAME] = "$address.$port";
       }
     }
     else {
-      $request->[REQ_PEERNAME] = "error:$!";
+      $request->[REQ_PEERNAME] = "error: $!";
     }
 
     $request->create_timer($heap->{factory}->timeout);
