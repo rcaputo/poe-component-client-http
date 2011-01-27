@@ -26,6 +26,7 @@ use POE::Component::Server::TCP;
 
 my @server_ports;
 
+my @done_responses;
 my @responses = (
   # Content-Length > length of actual content.
   (
@@ -68,6 +69,7 @@ my @responses = (
 {
   foreach (@responses) {
     POE::Component::Server::TCP->new(
+      Alias               => "server_$_",
       Address             => "127.0.0.1",
       Port                => 0,
       Started             => \&register_port,
@@ -91,6 +93,7 @@ my @responses = (
     return if $input ne "";
 
     my $response = pop @responses;
+    push @done_responses, $response;
     $_[HEAP]->{client}->put($response);
 
     $response =~ s/$CRLF/{CRLF}/g;
@@ -123,9 +126,18 @@ POE::Session->create(
 
       pass "got a response, content = ($content)";
 
-      ok(defined $response->request, "response has corresponding request object set");
+      ok(
+        defined($response->request),
+        "response has corresponding request object set"
+      );
+
+      return if @responses;
+      foreach (@done_responses) {
+        $_[KERNEL]->post("server_$_", "shutdown");
+      }
+      $_[KERNEL]->post('weeble', 'shutdown');
     },
-    _stop => sub { exit },  # Nasty but expedient.
+    _stop => sub { undef },
   }
 );
 
