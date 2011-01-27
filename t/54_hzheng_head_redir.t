@@ -1,5 +1,5 @@
 #! /usr/bin/perl
-# vim: filetype=perl sts=2 sw=2
+# vim: ts=2 sw=2 filetype=perl expandtab
 
 # Test case for POE::Component::Client::HTTP failing to redirect HEAD
 # requests.

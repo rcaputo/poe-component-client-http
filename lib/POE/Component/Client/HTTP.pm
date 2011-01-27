@@ -1,4 +1,5 @@
 package POE::Component::Client::HTTP;
+# vim: ts=2 sw=2 expandtab
 
 # {{{ INIT
 
@@ -1595,4 +1596,3 @@ http://search.cpan.org/dist/POE-Component-Client-HTTP/
 =cut
 
 # }}} POD
-# rocco // vim: ts=2 sw=2 expandtab

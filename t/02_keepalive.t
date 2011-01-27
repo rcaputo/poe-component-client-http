@@ -1,4 +1,4 @@
-# vim: filetype=perl sts=2 sw=2
+# vim: filetype=perl sw=2 ts=2 expandtab
 use strict;
 
 sub DEBUG () { 0 }

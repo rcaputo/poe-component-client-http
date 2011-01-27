@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 # -*- perl -*-
-# vim: filetype=perl
+# vim: filetype=perl sw=2 ts=2 expandtab
 
 # Contributed by Yuri Karaban.  Thank you!
 

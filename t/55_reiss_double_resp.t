@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# vim: filetype=perl
+# vim: ts=2 sw=2 filetype=perl expandtab
 
 # This tests cases where a socket it reused in spite of
 # the entire response not having been read off the socket.

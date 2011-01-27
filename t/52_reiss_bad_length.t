@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# vim: filetype=perl
+# vim: ts=2 sw=2 filetype=perl expandtab
 
 # There are cases where POE::Component::Client::HTTP generates no
 # responses.  This exercises some of them.

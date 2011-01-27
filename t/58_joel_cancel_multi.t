@@ -1,4 +1,6 @@
 #!perl
+# vim: ts=2 sw=2 filetype=perl expandtab
+
 # simple test case to exhibit behaviour where PoCoClHTTP fails when cancelling
 # a request before connection pool connections have been established
 

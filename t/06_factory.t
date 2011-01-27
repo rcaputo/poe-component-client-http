@@ -1,4 +1,4 @@
-# vim: filetype=perl
+# vim: filetype=perl sw=2 ts=2 expandtab
 
 use strict;
 use warnings;

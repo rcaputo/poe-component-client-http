@@ -1,4 +1,5 @@
 #!perl -T
+# vim: ts=2 sw=2 filetype=perl expandtab
 
 use Test::More;
 eval "use Test::Pod 1.14";

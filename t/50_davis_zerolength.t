@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# vim: filetype=perl ts=2 sw=2
+# vim: ts=2 sw=2 filetype=perl expandtab
 
 # Dave Davis' test case for rt.cpan.org ticket #13557:
 # "Zero length content header causes request to not post back".
