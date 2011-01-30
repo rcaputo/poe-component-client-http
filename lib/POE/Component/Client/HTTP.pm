@@ -445,7 +445,7 @@ sub _poco_weeble_timeout {
 
     # Well, we have a response.  Isn't that nice?  Let's send it.
     if ($request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE)) {
-      _finish_request($heap, $request, 0);
+      _finish_request($heap, $request);
       return;
     }
 
@@ -519,9 +519,10 @@ sub _poco_weeble_io_error {
 
   # Drop the wheel.
   my $request_id = delete $heap->{wheel_to_request}->{$wheel_id};
-  #K or die "!!!: unexpectedly undefined request ID" unless defined $request_id;
 
   # There was no corresponding request?  Nothing left to do here.
+  # We might have got here because the server sent EOF after we were done processing
+  # the request, and deleted it from our cache. ( notes for RT#50231 )
   return unless $request_id;
 
   DEBUG and warn "I/O: removing request $request_id";
@@ -556,7 +557,7 @@ sub _poco_weeble_io_error {
     $request->[REQ_STATE] & (RS_IN_CONTENT | RS_DONE) and
     not $request->[REQ_STATE] & RS_POSTED
   ) {
-    _finish_request($heap, $request, 0);
+    _finish_request($heap, $request);
     return;
   }
 
@@ -625,9 +626,10 @@ sub _poco_weeble_io_read {
   DEBUG and warn "I/O: wheel $wheel_id got input...";
   DEBUG_DATA and warn (ref($input) ? $input->as_string : _hexdump($input));
 
-  # TODO - So, which is it?  Return, or die?
+  # There was no corresponding request?  Nothing left to do here.
+  # We might have got here because the server sent EOF after we were done processing
+  # the request, and deleted it from our cache. ( notes for RT#50231 )
   return unless defined $request_id;
-  die unless defined $request_id;
 
   my $request = $heap->{request}->{$request_id};
   return unless defined $request;
@@ -690,7 +692,7 @@ sub _poco_weeble_io_read {
       }
       $request->[REQ_STATE] |= RS_DONE;
       $request->remove_timeout();
-      _finish_request($heap, $request, 1);
+      _finish_request($heap, $request);
       return;
     }
     else {
@@ -817,7 +819,7 @@ sub _poco_weeble_io_read {
     not $request->[REQ_STATE] & RS_POSTED
   ) {
     $request->remove_timeout;
-    _finish_request($heap, $request, 1);
+    _finish_request($heap, $request);
   }
 
 # }}} deliver reponse if complete
@@ -891,7 +893,7 @@ sub _try_redirect {
 # {{{ _finish_request
 
 sub _finish_request {
-  my ($heap, $request, $wait) = @_;
+  my ($heap, $request) = @_;
 
   my $request_id = $request->ID;
   if (DEBUG) {
@@ -915,31 +917,7 @@ sub _finish_request {
 
   DEBUG and warn "address is $address";
 
-  if ($wait) {
-    # Wait a bit with removing the request, so there's time to receive
-    # the EOF event in case the connection gets closed.
-    # TODO - Inflates the pending request count.  Why do we do this?
-    my $alarm_id = $poe_kernel->delay_set('remove_request', 0.5, $request_id);
-
-    # remove the old timeout first
-    DEBUG and warn "delay_set; now remove_timeout()";
-    $request->remove_timeout();
-    DEBUG and warn "removed timeout; now timer()";
-    $request->timer($alarm_id);
-  }
-  else {
-    # Virtually identical to _remove_request.
-    # TODO - Make a common sub to handle both cases?
-    my $request = delete $heap->{request}->{$request_id};
-    if (defined $request) {
-      DEBUG and warn "I/O: removing request $request_id";
-      $request->remove_timeout();
-      delete $heap->{ext_request_to_int_id}{$request->[REQ_HTTP_REQUEST]};
-      if (my $wheel = $request->wheel) {
-        delete $heap->{wheel_to_request}->{$wheel->ID};
-      }
-    }
-  }
+  return _clear_req_cache( $heap, $request_id );
 }
 
 # }}} _finish_request
@@ -947,6 +925,15 @@ sub _finish_request {
 #{{{ _remove_request
 sub _poco_weeble_remove_request {
   my ($kernel, $heap, $request_id) = @_[KERNEL, HEAP, ARG0];
+
+  return _clear_req_cache( $heap, $request_id );
+}
+#}}} _remove_request
+
+# helper subroutine to remove a request from our caches
+#{{{ _clear_req_cache
+sub _clear_req_cache {
+  my ($heap, $request_id) = @_;
 
   my $request = delete $heap->{request}->{$request_id};
   if (defined $request) {
@@ -957,8 +944,10 @@ sub _poco_weeble_remove_request {
       delete $heap->{wheel_to_request}->{$wheel->ID};
     }
   }
+
+  return;
 }
-#}}} _remove_request
+#}}} _clear_req_cache
 
 # Cancel a single request by HTTP::Request object.
 
@@ -1351,6 +1340,10 @@ requests currently being processed.  To receive the return value, it
 must be invoked with $kernel->call().
 
   my $count = $kernel->call('ua' => 'pending_requests_count');
+
+NOTE: Sometimes the count might not be what you expected, because responses
+are currently in POE's queue and you haven't processed them. This could happen
+if you configure the C<ConnectionManager>'s concurrency to a high enough value.
 
 =head2 cancel
 
