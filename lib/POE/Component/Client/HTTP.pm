@@ -1514,8 +1514,6 @@ This feature was added at Doreen Grey's request.  Doreen wanted a
 means to find the remote server's address without having to make an
 additional request.
 
-Patches for IPv6 support are welcome.
-
 =head1 ENVIRONMENT
 
 POE::Component::Client::HTTP uses two standard environment variables:
