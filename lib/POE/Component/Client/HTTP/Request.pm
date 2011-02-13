@@ -25,6 +25,10 @@ my $request_seq = 0;
 
 use constant DEBUG => 0;
 
+# TODO CONNECT - Add a flag to indicate whether to generate an HTTP
+# CONNECT request for proxying, or to return REQ_HTTP_REQUEST.  Add a
+# method to update that flag.
+
 use constant REQ_ID            =>  0;
 use constant REQ_POSTBACK      =>  1;
 use constant REQ_CONNECTION    =>  2;

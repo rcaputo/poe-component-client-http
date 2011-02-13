@@ -277,6 +277,10 @@ sub _poco_weeble_request {
 
   eval {
     # get a connection from Client::Keepalive
+    #
+    # TODO CONNECT - We must ask PCC::Keepalive to establish an http
+    # socket, not https.  The initial proxy interactin is plaintext?
+
     $request->[REQ_CONN_ID] = $heap->{cm}->allocate(
       scheme  => $request->scheme,
       addr    => $request->host,
@@ -664,6 +668,25 @@ sub _poco_weeble_io_read {
     # include a status line.  See t/53_response_parser.t.
     $request->[REQ_RESPONSE] = $input;
     $input->header("X-PCCH-Peer", $request->[REQ_PEERNAME]);
+
+    # TODO CONNECT - If we've got the headers to a CONNECT request,
+    # then we can switch to the actual request.  This is like a faux
+    # redirect where the socket gets reused.
+    #
+    # 1. Switch the socket to SSL.
+    # 2. Switch the request from CONNECT mode to regular mode, using
+    #    the method proposed in PCCH::Request.
+    # 3. Send the original request via PCCH::Request->send_to_wheel().
+    #    This puts the client back into the RS_SENDING state.
+    # 4. Reset any data/state so it appears we never went through
+    #    CONNECT.
+    # 5. Make sure that PCC::Keepalive will discard the socket when
+    #    we're done with it.
+    # 6. Return.  The connection should proceed as normal.
+    #
+    # I think the normal handling for HTTP errors will cover the case
+    # of CONNECT failure.  If not, we can refine the implementation as
+    # needed.
 
     # Some responses are without content by definition
     # FIXME: #12363

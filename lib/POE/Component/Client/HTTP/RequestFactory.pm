@@ -227,7 +227,6 @@ sub create_request {
     and length $http_request->protocol()
   );
 
-
   # Add the User-Agent: header if one isn't included.
   unless (defined $http_request->user_agent()) {
     $http_request->user_agent($self->agent);
@@ -293,6 +292,10 @@ sub create_request {
   #
   # RCAPUTO 2006-03-23: We only support http proxying right now.
   # Avoid proxying if this isn't an http request.
+
+  # TODO CONNECT - Create a PCCH::Request object in https-CONNECT mode
+  # if we're using https and there's an appropriate proxy.
+
   my $proxy = $proxy_override;
   if ($http_request->uri->scheme() eq "http") {
     $proxy ||= $self->[FCT_HTTP_PROXY];
