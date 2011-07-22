@@ -1597,12 +1597,13 @@ https://rt.cpan.org/Dist/Display.html?Queue=POE-Component-Client-HTTP
 
 =head1 REPOSITORY
 
-http://github.com/rcaputo/poe-component-client-http
-http://gitorious.org/poe-component-client-http
+Github: L<http://github.com/rcaputo/poe-component-client-http> .
+
+Gitorious: L<http://gitorious.org/poe-component-client-http> .
 
 =head1 OTHER RESOURCES
 
-http://search.cpan.org/dist/POE-Component-Client-HTTP/
+L<http://search.cpan.org/dist/POE-Component-Client-HTTP/>
 
 =cut
 
