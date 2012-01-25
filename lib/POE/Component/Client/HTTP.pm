@@ -225,7 +225,8 @@ sub _poco_weeble_request {
        . "</HTML>\n"
     );
     $rsp->request($http_request);
-    if (ref $response_event) {
+    if (ref($response_event) eq 'POE::Component::Client::HTTP::Request') {
+      use Carp qw(confess); confess("blessed $response_event");
       $response_event->postback->($rsp);
     } else {
       $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
@@ -246,7 +247,7 @@ sub _poco_weeble_request {
        . "</HTML>\n"
       );
     $rsp->request($http_request);
-    if (ref $response_event) {
+    if (ref($response_event) eq 'POE::Component::Client::HTTP::Request') {
       $response_event->postback->($rsp);
     } else {
       $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
