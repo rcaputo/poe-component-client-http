@@ -170,9 +170,13 @@ sub got_response {
   }
   elsif (
     $request_path =~ m/badhost$/ and
-    ($response->code == 500 or $response->code == 408)
+    (
+      $response->code == 500 or
+      $response->code == 408 or
+      $response->code == 303     # some DNS's redirect bad hosts
+    )
   ) {
-    pass('got 500 response for request on bad host')
+    pass("got " . $response->code . " response for request on bad host")
   }
   elsif ($request_path =~ m/filesystem$/ and $response->code == 400) {
     pass('got 400 response for request with unsupported scheme')
