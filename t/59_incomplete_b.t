@@ -116,5 +116,8 @@ sub response_handler {
     is($response->code, 406, 'length(content) triggered 406');
   }
 
-  $heap->{testd}->shutdown() unless --$heap->{query_count};
+  return if --$heap->{query_count};
+
+  $heap->{testd}->shutdown();
+  $_[KERNEL]->post( ua => 'shutdown' );
 }

@@ -92,5 +92,6 @@ sub response_handler {
   } elsif ($path eq '/one') {
     is ($response->code, 204, "got a correct response code for the non-cancelled request");
     $heap->{testd}->shutdown;
+    $_[KERNEL]->post( ua => 'shutdown' );
   }
 }

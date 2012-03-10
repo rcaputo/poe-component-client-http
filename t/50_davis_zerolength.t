@@ -94,6 +94,7 @@ sub nonzero_length_response {
   pass("... got a response");
   isnt($response_object, '', "... and it has content");
   $_[HEAP]->{testd}->shutdown;
+  $_[KERNEL]->post( ua => 'shutdown' );
 }
 
 POE::Kernel->run();

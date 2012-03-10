@@ -29,12 +29,13 @@ POE::Component::Client::HTTP->spawn(
 
 POE::Session->create(
   inline_states => {
-    _start        => \&client_start,
-    _stop         => \&client_stop,
-    got_response  => \&client_got_response,
-    testd_registered => \&testd_start,
-    testd_client_input => \&testd_input,
-    testd_disconnected => \&testd_disc,
+    _start               => \&client_start,
+    _stop                => \&client_stop,
+    got_response         => \&client_got_response,
+    got_timeout          => \&client_timeout,
+    testd_registered     => \&testd_start,
+    testd_client_input   => \&testd_input,
+    testd_disconnected   => \&testd_disc,
     testd_client_flushed => \&testd_out,
   }
 );
@@ -138,9 +139,14 @@ sub client_got_response {
       $next_chunk_character++;
     }
     $_[KERNEL]->call( streamer => cancel => $_[ARG0][0] );
+    $_[KERNEL]->delay( got_timeout => 2 );
     return;
   }
 
   $total_octets_got += length($chunk_buffer);
   is($total_octets_got, MAX_STREAM_CHUNK_SIZE, "Got the right amount of data");
+}
+
+sub client_timeout {
+  $_[KERNEL]->post( weeble => 'shutdown' );
 }

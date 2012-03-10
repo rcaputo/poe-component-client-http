@@ -61,11 +61,12 @@ sub client_got_response {
 
   is ($http_response->code, 200, 'Got OK response');
 
+  $kernel->post( weeble => 'shutdown' );
 }
 
 # Create a weeble component.
 POE::Component::Client::HTTP->spawn(
-  Timeout           => 60,
+  Timeout => 60,
 );
 
 # Create a session that will make some requests.

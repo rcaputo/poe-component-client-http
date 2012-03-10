@@ -105,6 +105,7 @@ sub send_after_timeout {
 
   $heap->{testd}->send_to_client($id, $data);
   $heap->{testd}->shutdown;
+  $_[KERNEL]->post( weeble => 'shutdown' );
 }
 
 sub testd_client_input {
@@ -121,6 +122,7 @@ sub testd_client_input {
   elsif ($buffer =~ /^GET \/timeout/) {
     pass("got test request we will let timeout");
     $heap->{input_buffer} = "";
+
     $kernel->delay_add('send_after_timeout', 3.3, $id);
   }
   elsif ($buffer =~ /^POST \/post1.*field.*field/s) {

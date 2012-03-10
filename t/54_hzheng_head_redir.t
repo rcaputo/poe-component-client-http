@@ -104,6 +104,8 @@ sub automatic {
   my $exp_host = $heap->{destination};
   is( $rsp_host, $exp_host, "automatic redirect host matches manual result");
   $heap->{testd}->shutdown;
+  $kernel->post( no_redir => 'shutdown' );
+  $kernel->post( redir    => 'shutdown' );
 }
 
 

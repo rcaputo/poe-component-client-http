@@ -133,8 +133,9 @@ sub got_response {
         is(substr($chunk, 0, 1), $next , "chunk starts with $next");
       }
     } else {
-      ok(@expect == 0);
+      ok(@expect == 0, "got end of stream");
       $heap->{testd}->shutdown;
+      $kernel->post( weeble => 'shutdown' );
     }
   } elsif ($request_path =~ m/timeout$/ and $response->code == 408) {
     ok(1, 'got 408 response for timed out request')
