@@ -22,6 +22,14 @@ use constant FCT_TIMEOUT         => 9;
 use constant DEBUG               => 0;
 use constant DEFAULT_BLOCK_SIZE  => 4096;
 
+=head1 NAME
+
+POE::Component::Client::HTTP::RequestFactory - an HTTP request factory object
+
+=head1 SYNOPSIS
+
+  # Used internally by POE::Component::Client::HTTP
+
 =head1 CONSTRUCTOR
 
 =head2 new
