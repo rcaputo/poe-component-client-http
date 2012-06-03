@@ -287,7 +287,6 @@ sub add_content {
 
     $self->[REQ_STATE] |= RS_DONE;
     $self->[REQ_STATE] &= ~RS_IN_CONTENT;
-    $self->[REQ_CONNECTION]->close();
     return 1;
   }
 

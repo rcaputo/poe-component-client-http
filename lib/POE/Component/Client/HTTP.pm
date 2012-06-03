@@ -630,14 +630,17 @@ sub _poco_weeble_io_read {
   DEBUG_DATA and warn (ref($input) ? $input->as_string : _hexdump($input));
 
   # There was no corresponding request?  Nothing left to do here.
-  # We might have got here because the server sent EOF after we were done processing
-  # the request, and deleted it from our cache. ( notes for RT#50231 )
+  #
+  # We might have got here because the server sent EOF after we were
+  # done processing the request, and deleted it from our cache. (
+  # notes for RT#50231 )
   return unless defined $request_id;
 
   my $request = $heap->{request}->{$request_id};
   return unless defined $request;
   DEBUG and warn(
-    "REQUEST $request_id is $request <" . $request->[REQ_HTTP_REQUEST]->uri . ">"
+    "REQUEST $request_id is $request <",
+    $request->[REQ_HTTP_REQUEST]->uri(), ">"
   );
 
   # Reset the timeout if we get data.
@@ -827,7 +830,7 @@ sub _poco_weeble_io_read {
       # $request->close_connection;
     }
     else {
-      my $is_done = $request->add_content ($input);
+      $request->add_content($input);
     }
   }
 
