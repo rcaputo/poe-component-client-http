@@ -12,7 +12,10 @@ use constant DEBUG_DATA => 0;
 use Carp qw(croak);
 use HTTP::Response;
 use Net::HTTP::Methods;
-use Socket qw(sockaddr_in inet_ntoa);
+use Socket qw(
+  sockaddr_in inet_ntoa
+  getnameinfo NI_NUMERICHOST NI_NUMERICSERV
+);
 
 use POE::Component::Client::HTTP::RequestFactory;
 use POE::Component::Client::HTTP::Request qw(:states :fields);
@@ -26,8 +29,6 @@ BEGIN {
     Time::HiRes->import("time");
   };
 }
-
-use Socket::GetAddrInfo qw(:newapi getnameinfo NI_NUMERICHOST NI_NUMERICSERV);
 
 use POE qw(
   Driver::SysRW Filter::Stream
