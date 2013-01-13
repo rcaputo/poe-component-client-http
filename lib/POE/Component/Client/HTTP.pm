@@ -1342,12 +1342,12 @@ Requests are posted to the component's "request" state.  They include
 an HTTP::Request object which defines the request.  For example:
 
   $kernel->post(
-    'ua', 'request',           # http session alias & state
-    'response',                # my state to receive responses
-    GET 'http://poe.perl.org', # a simple HTTP request
-    'unique id',               # a tag to identify the request
-    'progress',                # an event to indicate progress
-    'http://1.2.3.4:80/'       # proxy to use for this request
+    'ua', 'request',            # http session alias & state
+    'response',                 # my state to receive responses
+    GET('http://poe.perl.org'), # a simple HTTP request
+    'unique id',                # a tag to identify the request
+    'progress',                 # an event to indicate progress
+    'http://1.2.3.4:80/'        # proxy to use for this request
   );
 
 Requests include the state to which responses will be posted.  In the
