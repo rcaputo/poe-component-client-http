@@ -208,12 +208,10 @@ sub _poco_weeble_request {
     $proxy_override
   ) = @_[KERNEL, HEAP, SENDER, ARG0, ARG1, ARG2, ARG3, ARG4];
 
+  my $scheme = $http_request->uri->scheme;
   unless (
-    defined($http_request->uri->scheme) and
-    length($http_request->uri->scheme) and
-    $supported_schemes{$http_request->uri->scheme} and
-    defined($http_request->uri->host) and
-    length($http_request->uri->host)
+    defined($scheme) and
+    exists $supported_schemes{$scheme}
   ) {
     my $rsp = HTTP::Response->new(
        400 => 'Bad Request', [],
@@ -221,13 +219,33 @@ sub _poco_weeble_request {
        . "<HEAD><TITLE>Error: Bad Request</TITLE></HEAD>\n"
        . "<BODY>\n"
        . "<H1>Error: Bad Request</H1>\n"
-       . "Unsupported URI scheme\n"
+       . "Unsupported URI scheme: '$scheme'\n"
        . "</BODY>\n"
        . "</HTML>\n"
     );
     $rsp->request($http_request);
     if (ref($response_event) eq 'POE::Component::Client::HTTP::Request') {
-      use Carp qw(confess); confess("blessed $response_event");
+      $response_event->postback->($rsp);
+    } else {
+      $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
+    }
+    return;
+  }
+
+  my $host = $http_request->uri->host;
+  unless (defined $host and length $host) {
+    my $rsp = HTTP::Response->new(
+       400 => 'Bad Request', [],
+       "<html>\n"
+       . "<HEAD><TITLE>Error: Bad Request</TITLE></HEAD>\n"
+       . "<BODY>\n"
+       . "<H1>Error: Bad Request</H1>\n"
+       . "URI contains no discernable host.\n"
+       . "</BODY>\n"
+       . "</HTML>\n"
+    );
+    $rsp->request($http_request);
+    if (ref($response_event) eq 'POE::Component::Client::HTTP::Request') {
       $response_event->postback->($rsp);
     } else {
       $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
