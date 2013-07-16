@@ -1,5 +1,12 @@
 # vim: filetype=perl sw=2 ts=2 expandtab
+
 use strict;
+
+BEGIN {
+  my @proxies = grep /^http.*proxy$/i, keys %ENV;
+  delete @ENV{@proxies} if @proxies;
+}
+
 use Test::More;
 use POE qw(
   Filter::Stream

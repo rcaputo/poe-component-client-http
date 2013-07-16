@@ -7,7 +7,12 @@
 use strict;
 use warnings;
 
-sub DEBUG () { 0 };
+sub DEBUG () { 0 }
+
+BEGIN {
+  my @proxies = grep /^http.*proxy$/i, keys %ENV;
+  delete @ENV{@proxies} if @proxies;
+}
 
 use Test::More tests => 2;
 use Test::POE::Server::TCP;

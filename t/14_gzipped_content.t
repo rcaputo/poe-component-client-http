@@ -6,6 +6,11 @@
 use warnings;
 use strict;
 
+BEGIN {
+  my @proxies = grep /^http.*proxy$/i, keys %ENV;
+  delete @ENV{@proxies} if @proxies;
+}
+
 use IO::Socket::INET;
 use Socket '$CRLF', '$LF', '$CR';
 use HTTP::Request::Common 'GET';

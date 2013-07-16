@@ -1,6 +1,13 @@
 #!/usr/bin/perl
+
 use strict;
 use warnings;
+
+BEGIN {
+  my @proxies = grep /^http.*proxy$/i, keys %ENV;
+  delete @ENV{@proxies} if @proxies;
+}
+
 use POE qw(
   Filter::Stream
   Component::Client::HTTP

@@ -7,6 +7,11 @@
 use warnings;
 use strict;
 
+BEGIN {
+  my @proxies = grep /^http.*proxy$/i, keys %ENV;
+  delete @ENV{@proxies} if @proxies;
+}
+
 use Test::More;
 use Test::POE::Server::TCP;
 use POE qw(Filter::Stream Component::Client::HTTP);

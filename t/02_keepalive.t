@@ -1,5 +1,11 @@
 # vim: filetype=perl sw=2 ts=2 expandtab
+
 use strict;
+
+BEGIN {
+  my @proxies = grep /^http.*proxy$/i, keys %ENV;
+  delete @ENV{@proxies} if @proxies;
+}
 
 sub DEBUG () { 0 }
 #sub POE::Kernel::ASSERT_DEFAULT () { 1 }

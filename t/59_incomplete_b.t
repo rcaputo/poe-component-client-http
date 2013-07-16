@@ -1,6 +1,13 @@
 # vim: filetype=perl ts=2 sw=2 expandtab
+
 use strict;
 use warnings;
+
+BEGIN {
+  my @proxies = grep /^http.*proxy$/i, keys %ENV;
+  delete @ENV{@proxies} if @proxies;
+}
+
 use HTTP::Request;
 use HTTP::Status;
 use Test::More;

@@ -3,6 +3,11 @@
 
 use strict;
 
+BEGIN {
+  my @proxies = grep /^http.*proxy$/i, keys %ENV;
+  delete @ENV{@proxies} if @proxies;
+}
+
 use HTTP::Request::Common qw(GET);
 use Test::More;
 
