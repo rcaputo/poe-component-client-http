@@ -1038,7 +1038,8 @@ sub _internal_cancel {
   else {
     # Didn't connect yet; inform connection manager to cancel
     # connection request.
-    $heap->{cm}->deallocate($request_id);
+
+    $heap->{cm}->deallocate($request->[REQ_CONN_ID]);
   }
 
   unless ($request->[REQ_STATE] & RS_POSTED) {
