@@ -104,6 +104,8 @@ sub new {
   }
 
   my $v = $POE::Component::Client::HTTP::VERSION;
+  $v = "0.000" unless defined $v;
+
   push(
     @$agent,
     sprintf(
