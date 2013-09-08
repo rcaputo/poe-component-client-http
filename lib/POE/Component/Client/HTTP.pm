@@ -979,12 +979,23 @@ sub _clear_req_cache {
   my ($heap, $request_id) = @_;
 
   my $request = delete $heap->{request}->{$request_id};
-  if (defined $request) {
-    DEBUG and warn "I/O: removed request $request_id";
-    $request->remove_timeout();
-    delete $heap->{ext_request_to_int_id}{$request->[REQ_HTTP_REQUEST]};
-    if (my $wheel = $request->wheel) {
-      delete $heap->{wheel_to_request}->{$wheel->ID};
+  return unless defined $request;
+
+  DEBUG and warn "I/O: removed request $request_id";
+
+  $request->remove_timeout();
+  delete $heap->{ext_request_to_int_id}{$request->[REQ_HTTP_REQUEST]};
+  if (my $wheel = $request->wheel) {
+    delete $heap->{wheel_to_request}->{$wheel->ID};
+  }
+
+  # If the response wants us to close the connection, regrettably do
+  # so.
+  if (defined(my $response = $request->[REQ_RESPONSE])) {
+    my $connection_header = $response->header('Connection');
+    if (defined $connection_header and $connection_header =~ /\bclose\b/) {
+      DEBUG and warn "I/O: closing connection on server's request";
+      $request->[REQ_CONNECTION]->close();
     }
   }
 
