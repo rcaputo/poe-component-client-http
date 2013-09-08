@@ -8,15 +8,19 @@ use base 'POE::Filter';
 
 use HTTP::Response;
 
-sub FRAMING_BUFFER   () { 0 }
-sub CURRENT_STATE    () { 1 }
-sub WORK_RESPONSE    () { 2 }
-sub PROTOCOL_VERSION () { 3 }
+use constant {
+  FRAMING_BUFFER   => 0,
+  CURRENT_STATE    => 1,
+  WORK_RESPONSE    => 2,
+  PROTOCOL_VERSION => 3,
+};
 
-sub STATE_STATUS () { 0x01 }  # waiting for a status line
-sub STATE_HEADER () { 0x02 }  # gotten status, looking for header or end
+use constant {
+  STATE_STATUS => 0x01,  # waiting for a status line
+  STATE_HEADER => 0x02,  # gotten status, looking for header or end
+};
 
-sub DEBUG () { 0 }
+use constant DEBUG => 0;
 
 sub new {
   my $type = shift;

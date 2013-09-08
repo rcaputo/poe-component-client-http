@@ -10,17 +10,21 @@ use base 'POE::Filter';
 
 use HTTP::Response;
 
-use constant FRAMING_BUFFER  => 0;
-use constant CURRENT_STATE   => 1;
-use constant CHUNK_SIZE      => 2;
-use constant CHUNK_BUFFER    => 3;
-use constant TRAILER_HEADERS => 4;
+use constant {
+  FRAMING_BUFFER  => 0,
+  CURRENT_STATE   => 1,
+  CHUNK_SIZE      => 2,
+  CHUNK_BUFFER    => 3,
+  TRAILER_HEADERS => 4,
+};
 
-use constant STATE_SIZE      => 0x01;  # waiting for a status line
-use constant STATE_DATA      => 0x02;  # received status, looking for header or end
-use constant STATE_TRAILER   => 0x04;  # received status, looking for header or end
+use constant {
+  STATE_SIZE      => 0x01,  # waiting for a status line
+  STATE_DATA      => 0x02,  # received status, looking for header or end
+  STATE_TRAILER   => 0x04,  # received status, looking for header or end
+};
 
-use constant DEBUG           => 0;
+use constant DEBUG => 0;
 
 sub new {
   my ($class) = @_;

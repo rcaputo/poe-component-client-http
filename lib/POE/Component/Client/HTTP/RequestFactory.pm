@@ -8,18 +8,21 @@ use Carp;
 use POE::Component::Client::HTTP::Request;
 use POE::Component::Client::HTTP;
 
-use constant FCT_AGENT           => 0;
-use constant FCT_STREAMING       => 1;
-use constant FCT_MAXSIZE         => 2;
-use constant FCT_PROTOCOL        => 3;
-use constant FCT_COOKIEJAR       => 4;
-use constant FCT_FROM            => 5;
-use constant FCT_NOPROXY         => 6;
-use constant FCT_HTTP_PROXY      => 7;
-use constant FCT_FOLLOWREDIRECTS => 8;
-use constant FCT_TIMEOUT         => 9;
+use constant {
+  FCT_AGENT           => 0,
+  FCT_STREAMING       => 1,
+  FCT_MAXSIZE         => 2,
+  FCT_PROTOCOL        => 3,
+  FCT_COOKIEJAR       => 4,
+  FCT_FROM            => 5,
+  FCT_NOPROXY         => 6,
+  FCT_HTTP_PROXY      => 7,
+  FCT_FOLLOWREDIRECTS => 8,
+  FCT_TIMEOUT         => 9,
+};
 
-use constant DEBUG               => 0;
+use constant DEBUG => 0;
+
 use constant DEFAULT_BLOCK_SIZE  => 4096;
 
 =head1 NAME
