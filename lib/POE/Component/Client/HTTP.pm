@@ -9,7 +9,7 @@ use strict;
 use constant DEBUG      => 0;
 use constant DEBUG_DATA => 0;
 
-use Carp qw(croak);
+use Carp qw(croak carp);
 use HTTP::Response;
 use Net::HTTP::Methods;
 use Socket qw(
@@ -225,6 +225,7 @@ sub _poco_weeble_request {
     );
     $rsp->request($http_request);
     if (ref($response_event) eq 'POE::Component::Client::HTTP::Request') {
+      # This happens during redirect.
       $response_event->postback->($rsp);
     } else {
       $kernel->post($sender, $response_event, [$http_request, $tag], [$rsp]);
@@ -445,12 +446,12 @@ sub _poco_weeble_timeout {
   delete $heap->{ext_request_to_int_id}->{$request->[REQ_HTTP_REQUEST]};
 
   # There's a wheel attached to the request.  Shut it down.
-  if (defined(my $wheel = $request->wheel())) {
-    my $wheel_id = $wheel->ID();
+  if ($request->wheel) {
+    my $wheel_id = $request->wheel->ID();
     DEBUG and warn "T/O: request $request_id is wheel $wheel_id";
 
     # Shut down the connection so it's not reused.
-    $wheel->shutdown_input();
+    $request->wheel->shutdown_input();
     delete $heap->{wheel_to_request}->{$wheel_id};
   }
 
@@ -505,7 +506,7 @@ sub _poco_weeble_io_flushed {
     my $buf = eval { $callback->() };
 
     if ( $buf ) {
-      $request->[REQ_CONNECTION]->wheel->put($buf);
+      $request->wheel->put($buf);
 
       # reset the timeout
       # Have to also reset REQ_START_TIME or timer ends early
@@ -768,8 +769,7 @@ sub _poco_weeble_io_read {
           DEBUG and warn "I/O: removed request $request_id";
           delete $heap->{ext_request_to_int_id}{$old_request->[REQ_HTTP_REQUEST]};
           $old_request->remove_timeout();
-          $old_request->[REQ_CONNECTION]->close();
-          $old_request->[REQ_CONNECTION] = undef;
+          $old_request->close_connection();
         }
         return;
       }
@@ -940,11 +940,7 @@ sub _finish_request {
 
   my $request_id = $request->ID;
   if (DEBUG) {
-    my ($pkg, $file, $line) = caller();
-    warn(
-      "XXX: calling _finish_request(request id = $request_id)" .
-      "at $file line $line"
-    );
+    carp "XXX: calling _finish_request(request id = $request_id)";
   }
 
   # XXX What does this do?
@@ -990,12 +986,14 @@ sub _clear_req_cache {
   }
 
   # If the response wants us to close the connection, regrettably do
-  # so.
-  if (defined(my $response = $request->[REQ_RESPONSE])) {
-    my $connection_header = $response->header('Connection');
-    if (defined $connection_header and $connection_header =~ /\bclose\b/) {
-      DEBUG and warn "I/O: closing connection on server's request";
-      $request->[REQ_CONNECTION]->close();
+  # so.  Only matters if the request is defined.
+  if ($request->[REQ_CONNECTION]) {
+    if (defined(my $response = $request->[REQ_RESPONSE])) {
+      my $connection_header = $response->header('Connection');
+      if (defined $connection_header and $connection_header =~ /\bclose\b/) {
+        DEBUG and warn "I/O: closing connection on server's request";
+        $request->close_connection();
+      }
     }
   }
 
@@ -1024,16 +1022,15 @@ sub _internal_cancel {
   $request->remove_timeout();
   delete $heap->{ext_request_to_int_id}{$request->[REQ_HTTP_REQUEST]};
 
-  if (my $wheel = $request->wheel) {
-    my $wheel_id = $wheel->ID;
+  if ($request->wheel) {
+    my $wheel_id = $request->wheel->ID;
     DEBUG and warn "CXL: Request $request_id canceling wheel $wheel_id";
     delete $heap->{wheel_to_request}{$wheel_id};
-    $wheel = undef;
   }
 
   if ($request->[REQ_CONNECTION]) {
-    $request->[REQ_CONNECTION]->close();
-    $request->[REQ_CONNECTION] = undef;
+    DEBUG and warn "I/O: Closing connection during internal cancel";
+    $request->close_connection();
   }
   else {
     # Didn't connect yet; inform connection manager to cancel

@@ -343,6 +343,8 @@ sub add_content {
   return 0;
 }
 
+### Methods to manage the request's timer.
+
 sub timer {
   my ($self, $timer) = @_;
 
@@ -381,6 +383,8 @@ sub remove_timeout {
     $self->[REQ_TIMER] = undef;
   }
 }
+
+###
 
 sub postback {
   my ($self, $postback) = @_;
@@ -591,6 +595,15 @@ sub host { shift->[REQ_HOST] }
 
 sub port { shift->[REQ_PORT] }
 
+
+sub close_connection {
+  my ($self) = @_;
+  return unless defined $self->[REQ_CONNECTION];
+  $self->[REQ_CONNECTION]->close();
+  $self->[REQ_CONNECTION] = undef;
+}
+
+
 sub scheme {
   my $self = shift;
 
@@ -712,6 +725,11 @@ FIXME - Not sure what this accessor does.
 Check whether the last response is a redirect, the request is
 permitted to follow redirects, and the maximum number of redirects has
 not been met.  Initiate a redirect if all conditions are favorable.
+
+=head2 close_connection
+
+Each active request object contains an internal connection.  This
+method closes it.
 
 =head2 send_to_wheel
 
