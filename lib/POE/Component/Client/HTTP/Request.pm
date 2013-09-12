@@ -29,32 +29,36 @@ use constant DEBUG => 0;
 # CONNECT request for proxying, or to return REQ_HTTP_REQUEST.  Add a
 # method to update that flag.
 
-use constant REQ_ID            =>  0;
-use constant REQ_POSTBACK      =>  1;
-use constant REQ_CONNECTION    =>  2;
-use constant REQ_HTTP_REQUEST  =>  3;
-use constant REQ_STATE         =>  4;
-use constant REQ_RESPONSE      =>  5;
-use constant REQ_BUFFER        =>  6;
-use constant REQ_OCTETS_GOT    =>  8;
-use constant REQ_TIMER         =>  9;
-use constant REQ_PROG_POSTBACK => 10;
-use constant REQ_USING_PROXY   => 11;
-use constant REQ_HOST          => 12;
-use constant REQ_PORT          => 13;
-use constant REQ_HISTORY       => 14;
-use constant REQ_START_TIME    => 15;
-use constant REQ_FACTORY       => 16;
-use constant REQ_CONN_ID       => 17;
-use constant REQ_PEERNAME      => 18;
+use constant {
+  REQ_ID            =>  0,
+  REQ_POSTBACK      =>  1,
+  REQ_CONNECTION    =>  2,
+  REQ_HTTP_REQUEST  =>  3,
+  REQ_STATE         =>  4,
+  REQ_RESPONSE      =>  5,
+  REQ_BUFFER        =>  6,
+  REQ_OCTETS_GOT    =>  8,
+  REQ_TIMER         =>  9,
+  REQ_PROG_POSTBACK => 10,
+  REQ_USING_PROXY   => 11,
+  REQ_HOST          => 12,
+  REQ_PORT          => 13,
+  REQ_HISTORY       => 14,
+  REQ_START_TIME    => 15,
+  REQ_FACTORY       => 16,
+  REQ_CONN_ID       => 17,
+  REQ_PEERNAME      => 18,
+};
 
-use constant RS_CONNECT        => 0x01; # establishing a connection
-use constant RS_SENDING        => 0x02; # sending request to server
-use constant RS_IN_HEAD        => 0x04; # waiting for or receiving headers
-use constant RS_REDIRECTED     => 0x08; # request has been redirected
-use constant RS_IN_CONTENT     => 0x20; # waiting for or receiving content
-use constant RS_DONE           => 0x40; # received full content
-use constant RS_POSTED         => 0x80; # we have posted back a response
+use constant {
+  RS_CONNECT        => 0x01, # establishing a connection
+  RS_SENDING        => 0x02, # sending request to server
+  RS_IN_HEAD        => 0x04, # waiting for or receiving headers
+  RS_REDIRECTED     => 0x08, # request has been redirected
+  RS_IN_CONTENT     => 0x20, # waiting for or receiving content
+  RS_DONE           => 0x40, # received full content
+  RS_POSTED         => 0x80, # we have posted back a response
+};
 
 sub import {
   my ($class) = shift;
