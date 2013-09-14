@@ -26,6 +26,9 @@ use constant {
 
 use constant DEBUG => 0;
 
+my $HEX = qr/[\dA-Fa-f]/o;
+
+
 sub new {
   my ($class) = @_;
 
@@ -40,7 +43,6 @@ sub new {
   return $self;
 }
 
-my $HEX = qr/[\dA-Fa-f]/o;
 
 =for later
 
@@ -58,6 +60,7 @@ my $chunk_extension = qr/(?:;$chunk_ext_name(?:$chunk_ext_val)?)/o;
 
 =cut
 
+
 sub get_one_start {
   my ($self, $chunks) = @_;
 
@@ -65,6 +68,7 @@ sub get_one_start {
   push (@{$self->[FRAMING_BUFFER]}, @$chunks);
   #warn "NUMBER OF CHUNKS is now ", scalar @{$self->[FRAMING_BUFFER]};
 }
+
 
 sub get_one {
   my $self = shift;
@@ -182,6 +186,7 @@ sub get_one {
   return $retval;
 }
 
+
 =for future
 
 sub put {
@@ -190,15 +195,15 @@ sub put {
 
 =cut
 
+
 sub get_pending {
   my $self = shift;
   return $self->[FRAMING_BUFFER] if @{$self->[FRAMING_BUFFER]};
   return undef;
 }
 
-__END__
 
-# {{{ POD
+__END__
 
 =head1 NAME
 
@@ -300,5 +305,3 @@ or mail L<mailto:bug-POE-Component-Client-HTTP@rt.cpan.org>
 For questions, try the L<POE> mailing list (poe@perl.org)
 
 =cut
-
-# }}} POD

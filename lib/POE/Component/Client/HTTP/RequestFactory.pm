@@ -25,6 +25,7 @@ use constant DEBUG => 0;
 
 use constant DEFAULT_BLOCK_SIZE  => 4096;
 
+
 =head1 NAME
 
 POE::Component::Client::HTTP::RequestFactory - an HTTP request factory object
@@ -88,6 +89,7 @@ Timeout
 =back
 
 =cut
+
 
 sub new {
   my ($class, $params) = @_;
@@ -161,6 +163,7 @@ sub new {
   return bless $self, $class;
 }
 
+
 =head1 METHODS
 
 =head2 timeout [$timeout]
@@ -169,6 +172,7 @@ Method that lets you query and/or change the timeout value for requests
 created by this factory.
 
 =cut
+
 
 sub timeout {
   my ($self, $timeout) = @_;
@@ -179,11 +183,13 @@ sub timeout {
   return $self->[FCT_TIMEOUT];
 }
 
+
 =head2 is_streaming
 
 Accessor for the Streaming parameter
 
 =cut
+
 
 sub is_streaming {
   my ($self) = @_;
@@ -196,11 +202,13 @@ sub is_streaming {
   return $self->[FCT_STREAMING];
 }
 
+
 =head2 agent
 
 Accessor to the Agent parameter
 
 =cut
+
 
 sub agent {
   my ($self) = @_;
@@ -208,11 +216,13 @@ sub agent {
   return $self->[FCT_AGENT]->[rand @{$self->[FCT_AGENT]}];
 }
 
+
 =head2 from
 
 getter/setter for the From parameter
 
 =cut
+
 
 sub from {
   my ($self) = @_;
@@ -223,11 +233,13 @@ sub from {
   return undef;
 }
 
+
 =head2 create_request
 
 Creates a new L<POE::Component::Client::HTTP::Request>
 
 =cut
+
 
 sub create_request {
   my ($self, $http_request, $response_event, $tag,
@@ -340,8 +352,8 @@ sub create_request {
   return $request;
 }
 
+
 # Determine whether a host is in a no-proxy list.
-# {{{ _in_no_proxy
 
 sub _in_no_proxy {
   my ($host, $no_proxy) = @_;
@@ -352,7 +364,6 @@ sub _in_no_proxy {
   return 0;
 }
 
-# }}} _in_no_proxy
 
 =head2 max_response_size
 
@@ -361,17 +372,20 @@ C<MaxSize> parameter to L<Client::HTTP>'s C<spawn()> method.
 
 =cut
 
+
 sub max_response_size {
   my ($self) = @_;
 
   return $self->[FCT_MAXSIZE];
 }
 
+
 =head2 block_size
 
 Accessor for the Streaming parameter
 
 =cut
+
 
 sub block_size {
   my ($self) = @_;
@@ -382,12 +396,14 @@ sub block_size {
   return $block_size;
 }
 
+
 =head2 frob_cookies $response
 
 Store the cookies from the L<HTTP::Response> parameter passed into
 our cookie jar
 
 =cut
+
 
 sub frob_cookies {
   my ($self, $response) = @_;
@@ -396,6 +412,7 @@ sub frob_cookies {
     $self->[FCT_COOKIEJAR] ->extract_cookies($response);
   }
 }
+
 
 =head2 max_redirect_count [$count]
 
@@ -406,6 +423,7 @@ C<spawn> method.
 
 =cut
 
+
 sub max_redirect_count {
   my ($self, $count) = @_;
 
@@ -414,6 +432,7 @@ sub max_redirect_count {
   }
   return $self->[FCT_FOLLOWREDIRECTS];
 }
+
 
 =head2 parse_proxy $proxy
 
@@ -430,6 +449,7 @@ array ferences), each containing a host and a port:
   ]
 
 =cut
+
 
 sub parse_proxy {
   my $proxy = $_[1];

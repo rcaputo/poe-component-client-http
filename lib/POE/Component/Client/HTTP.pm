@@ -1,8 +1,6 @@
 package POE::Component::Client::HTTP;
 # vim: ts=2 sw=2 expandtab
 
-# {{{ INIT
-
 use strict;
 #use bytes; # for utf8 compatibility
 
@@ -22,6 +20,7 @@ use POE::Component::Client::HTTP::Request qw(:states :fields);
 
 BEGIN {
   local $SIG{'__DIE__'} = 'DEFAULT';
+
   #TODO: move this to Client::Keepalive?
   # Allow more finely grained timeouts if Time::HiRes is available.
   eval {
@@ -89,14 +88,12 @@ my %supported_schemes = (
   https => 1,
 );
 
-# }}} INIT
 
 #------------------------------------------------------------------------------
 # Spawn a new PoCo::Client::HTTP session.  This basically is a
 # constructor, but it isn't named "new" because it doesn't create a
 # usable object.  Instead, it spawns the object off as a separate
 # session.
-# {{{ spawn
 
 sub spawn {
   my $type = shift;
@@ -156,9 +153,6 @@ sub spawn {
   undef;
 }
 
-# }}} spawn
-# ------------------------------------------------------------------------------
-# {{{ _poco_weeble_start
 
 sub _poco_weeble_start {
   my ($kernel, $heap) = @_[KERNEL, HEAP];
@@ -172,9 +166,6 @@ sub _poco_weeble_start {
   ) unless ($heap->{cm});
 }
 
-# }}} _poco_weeble_start
-#------------------------------------------------------------------------------
-# {{{ _poco_weeble_stop
 
 sub _poco_weeble_stop {
   my $heap = $_[HEAP];
@@ -188,8 +179,6 @@ sub _poco_weeble_stop {
   DEBUG and warn "Client::HTTP (alias=$heap->{alias}) stopped.";
 }
 
-# }}} _poco_weeble_stop
-# {{{ _poco_weeble_pending_requests_count
 
 sub _poco_weeble_pending_requests_count {
   my ($heap) = $_[HEAP];
@@ -197,9 +186,6 @@ sub _poco_weeble_pending_requests_count {
   return scalar keys %$r;
 }
 
-# }}} _poco_weeble_pending_requests_count
-#------------------------------------------------------------------------------
-# {{{ _poco_weeble_request
 
 sub _poco_weeble_request {
   my (
@@ -317,10 +303,6 @@ sub _poco_weeble_request {
   }
 }
 
-# }}} _poco_weeble_request
-
-#------------------------------------------------------------------------------
-# {{{ _poco_weeble_connect_done
 
 sub _poco_weeble_connect_done {
   my ($heap, $response) = @_[HEAP, ARG0];
@@ -420,9 +402,6 @@ sub _poco_weeble_connect_done {
   }
 }
 
-# }}} _poco_weeble_connect_done
-
-# {{{ _poco_weeble_timeout
 
 sub _poco_weeble_timeout {
   my ($kernel, $heap, $request_id) = @_[KERNEL, HEAP, ARG0];
@@ -478,9 +457,6 @@ sub _poco_weeble_timeout {
   }
 }
 
-# }}} _poco_weeble_timeout
-#------------------------------------------------------------------------------
-# {{{ _poco_weeble_io_flushed
 
 sub _poco_weeble_io_flushed {
   my ($heap, $wheel_id) = @_[HEAP, ARG0];
@@ -527,9 +503,6 @@ sub _poco_weeble_io_flushed {
   # $request->wheel->shutdown_output();
 }
 
-# }}} _poco_weeble_io_flushed
-#------------------------------------------------------------------------------
-# {{{ _poco_weeble_io_error
 
 sub _poco_weeble_io_error {
   my ($kernel, $heap, $operation, $errnum, $errstr, $wheel_id) =
@@ -634,12 +607,11 @@ sub _poco_weeble_io_error {
   $request->error(406, "Server response is Not Acceptable - $request_id");
 }
 
-# }}} _poco_weeble_io_error
+
 #------------------------------------------------------------------------------
 # Read a chunk of response.  This code is directly adapted from Artur
 # Bergman's nifty POE::Filter::HTTPD, which does pretty much the same
 # in the other direction.
-# {{{ _poco_weeble_io_read
 
 sub _poco_weeble_io_read {
   my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
@@ -670,7 +642,6 @@ sub _poco_weeble_io_read {
     return;
   }
 
-# {{{ HEAD
 
   # The very first line ought to be status.  If it's not, then it's
   # part of the content.
@@ -837,10 +808,6 @@ sub _poco_weeble_io_read {
     return;
   }
 
-# }}} HEAD
-
-# {{{ content
-
   # We're in a content state.
   if ($request->[REQ_STATE] & RS_IN_CONTENT) {
     if (ref($input) and UNIVERSAL::isa($input, 'HTTP::Response')) {
@@ -852,11 +819,7 @@ sub _poco_weeble_io_read {
     }
   }
 
-# }}} content
-
-# {{{ deliver reponse if complete
-
-# POST response without disconnecting
+  # POST response without disconnecting
   if (
     $request->[REQ_STATE] & RS_DONE and
     not $request->[REQ_STATE] & RS_POSTED
@@ -865,16 +828,11 @@ sub _poco_weeble_io_read {
     _finish_request($heap, $request);
   }
 
-# }}} deliver reponse if complete
-
 }
-
-# }}} _poco_weeble_io_read
 
 
 #------------------------------------------------------------------------------
 # Generate a hex dump of some input. This is not a POE function.
-# {{{ _hexdump
 
 sub _hexdump {
   my $data = shift;
@@ -896,7 +854,6 @@ sub _hexdump {
   return $dump;
 }
 
-# }}} _hexdump
 
 # Check for and handle redirect.  Returns true if redirect should
 # occur, or false if there's no redirect.
@@ -931,9 +888,9 @@ sub _try_redirect {
   return;
 }
 
+
 # Complete a request. This was moved out of _poco_weeble_io_error(). This is
 # not a POE function.
-# {{{ _finish_request
 
 sub _finish_request {
   my ($heap, $request) = @_;
@@ -959,18 +916,16 @@ sub _finish_request {
   return _clear_req_cache( $heap, $request_id );
 }
 
-# }}} _finish_request
 
-#{{{ _remove_request
 sub _poco_weeble_remove_request {
   my ($kernel, $heap, $request_id) = @_[KERNEL, HEAP, ARG0];
 
   return _clear_req_cache( $heap, $request_id );
 }
-#}}} _remove_request
+
 
 # helper subroutine to remove a request from our caches
-#{{{ _clear_req_cache
+
 sub _clear_req_cache {
   my ($heap, $request_id) = @_;
 
@@ -999,7 +954,7 @@ sub _clear_req_cache {
 
   return;
 }
-#}}} _clear_req_cache
+
 
 # Cancel a single request by HTTP::Request object.
 
@@ -1011,6 +966,7 @@ sub _poco_weeble_cancel {
     $heap, $request_id, 408, "Request timed out (request canceled)"
   );
 }
+
 
 sub _internal_cancel {
   my ($heap, $request_id, $code, $message) = @_;
@@ -1044,6 +1000,7 @@ sub _internal_cancel {
   }
 }
 
+
 # Shut down the entire component.
 sub _poco_weeble_shutdown {
   my ($kernel, $heap) = @_[KERNEL, HEAP];
@@ -1071,8 +1028,6 @@ sub _poco_weeble_shutdown {
 1;
 
 __END__
-
-# {{{ POD
 
 =head1 NAME
 
@@ -1638,5 +1593,3 @@ Gitorious: L<http://gitorious.org/poe-component-client-http> .
 L<http://search.cpan.org/dist/POE-Component-Client-HTTP/>
 
 =cut
-
-# }}} POD

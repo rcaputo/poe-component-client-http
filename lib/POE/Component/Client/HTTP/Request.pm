@@ -60,6 +60,7 @@ use constant {
   RS_POSTED         => 0x80, # we have posted back a response
 };
 
+
 sub import {
   my ($class) = shift;
 
@@ -94,10 +95,9 @@ sub import {
   }
 }
 
-sub ID {
-  my ($self) = @_;
-  return $self->[REQ_ID];
-}
+
+sub ID { return $_[0][REQ_ID] }
+
 
 sub new {
   my $class = shift;
@@ -174,6 +174,7 @@ sub new {
   return bless $self, $class;
 }
 
+
 sub return_response {
   my ($self) = @_;
 
@@ -209,6 +210,7 @@ sub return_response {
   }
   $self->[REQ_BUFFER] = '';
 }
+
 
 sub add_eof {
   my ($self) = @_;
@@ -253,6 +255,7 @@ sub add_eof {
     $self->return_response();
   }
 }
+
 
 sub add_content {
   my ($self, $data) = @_;
@@ -343,7 +346,9 @@ sub add_content {
   return 0;
 }
 
+
 ### Methods to manage the request's timer.
+
 
 sub timer {
   my ($self, $timer) = @_;
@@ -355,6 +360,7 @@ sub timer {
   }
   return $self->[REQ_TIMER];
 }
+
 
 sub create_timer {
   my ($self, $timeout) = @_;
@@ -372,6 +378,7 @@ sub create_timer {
   );
 }
 
+
 sub remove_timeout {
   my ($self) = @_;
 
@@ -384,7 +391,6 @@ sub remove_timeout {
   }
 }
 
-###
 
 sub postback {
   my ($self, $postback) = @_;
@@ -395,6 +401,7 @@ sub postback {
   }
   return $self->[REQ_POSTBACK];
 }
+
 
 sub _set_host_header {
   my ($request) = @_;
@@ -417,6 +424,7 @@ sub _set_host_header {
   return $@;
 }
 
+
 sub does_redirect {
   my ($self, $last) = @_;
 
@@ -430,6 +438,7 @@ sub does_redirect {
 
   return defined $self->[REQ_HISTORY];
 }
+
 
 sub check_redirect {
   my ($self) = @_;
@@ -490,6 +499,7 @@ sub check_redirect {
   return undef;
 }
 
+
 sub send_to_wheel {
   my ($self) = @_;
 
@@ -531,6 +541,7 @@ sub send_to_wheel {
   $self->[REQ_CONNECTION]->wheel->put ($request_string);
 }
 
+
 sub wheel {
   my ($self) = @_;
 
@@ -547,6 +558,7 @@ sub wheel {
   return unless $self->[REQ_CONNECTION];
   return $self->[REQ_CONNECTION]->wheel;
 }
+
 
 sub error {
   my ($self, $code, $message) = @_;
@@ -572,6 +584,7 @@ sub error {
   $self->[REQ_STATE] |= RS_POSTED;
 }
 
+
 sub connect_error {
   my ($self, $operation, $errnum, $errstr) = @_;
 
@@ -591,9 +604,11 @@ sub connect_error {
   return;
 }
 
-sub host { shift->[REQ_HOST] }
 
-sub port { shift->[REQ_PORT] }
+sub host { $_[0][REQ_HOST] }
+
+
+sub port { $_[0][REQ_PORT] }
 
 
 sub close_connection {
@@ -609,6 +624,7 @@ sub scheme {
 
   $self->[REQ_USING_PROXY] ? 'http' : $self->[REQ_HTTP_REQUEST]->uri->scheme;
 }
+
 
 sub DESTROY {
   my ($self) = @_;
