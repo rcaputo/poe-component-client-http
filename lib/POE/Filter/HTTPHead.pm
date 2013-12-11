@@ -59,14 +59,44 @@ sub get_one {
       DEBUG and warn "----- Waiting for a status line.\n";
 
       # Does the line look like a status line?
-      if ($line =~ m|^(?:HTTP/(\d+\.\d+) )?(\d{3})\s*(.+)?$|) {
-        $self->[PROTOCOL_VERSION] = $1 if defined $1;
-        $self->[WORK_RESPONSE] = HTTP::Response->new ($2, $3);
+      if ($line =~ m!^(\d{3})\s+(.+?)\s+HTTP/(\d+\.\d+)$!) {
+        $self->[PROTOCOL_VERSION] = $3;
+        $self->[WORK_RESPONSE] = HTTP::Response->new($1, $2);
         $self->[WORK_RESPONSE]->protocol('HTTP/' . $self->[PROTOCOL_VERSION]);
         $self->[CURRENT_STATE] = STATE_HEADER;
-
-        # We're done with the line.  Try the next one.
-        DEBUG and warn "Got a status line.\n";
+        DEBUG and warn "Got a status line";
+        next LINE;
+      }
+      elsif ($line =~ m!^(\d{3})\s+(.+?)$!) {
+        $self->[PROTOCOL_VERSION] = 0.9;
+        $self->[WORK_RESPONSE] = HTTP::Response->new($1, $2);
+        $self->[WORK_RESPONSE]->protocol('HTTP/' . $self->[PROTOCOL_VERSION]);
+        $self->[CURRENT_STATE] = STATE_HEADER;
+        DEBUG and warn "Got a status line";
+        next LINE;
+      }
+      elsif ($line =~ m!^(\d{3})$!) {
+        $self->[PROTOCOL_VERSION] = 0.9;
+        $self->[WORK_RESPONSE] = HTTP::Response->new($1);
+        $self->[WORK_RESPONSE]->protocol('HTTP/' . $self->[PROTOCOL_VERSION]);
+        $self->[CURRENT_STATE] = STATE_HEADER;
+        DEBUG and warn "Got a status line";
+        next LINE;
+      }
+      elsif ($line =~ m!^HTTP/(\d+\.\d+)\s+(\d{3})\s+(.*?)\s*$!) {
+        $self->[PROTOCOL_VERSION] = $1;
+        $self->[WORK_RESPONSE] = HTTP::Response->new($2, $3);
+        $self->[WORK_RESPONSE]->protocol('HTTP/' . $self->[PROTOCOL_VERSION]);
+        $self->[CURRENT_STATE] = STATE_HEADER;
+        DEBUG and warn "Got a status line";
+        next LINE;
+      }
+      elsif ($line =~ m!^HTTP/(\d+\.\d+)\s+(\d{3})\s*$!) {
+        $self->[PROTOCOL_VERSION] = $1;
+        $self->[WORK_RESPONSE] = HTTP::Response->new($2);
+        $self->[WORK_RESPONSE]->protocol('HTTP/' . $self->[PROTOCOL_VERSION]);
+        $self->[CURRENT_STATE] = STATE_HEADER;
+        DEBUG and warn "Got a status line";
         next LINE;
       }
 
