@@ -193,7 +193,7 @@ use strict;
 
 POE::Filter::HTTPHead - filter data as HTTP::Response objects
 
-=head1 SYNOPSYS
+=head1 SYNOPSIS
 
   $filter = POE::Filter::HTTPHead->new();
   $arrayref_of_response_objects =
