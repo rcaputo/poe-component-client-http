@@ -2,6 +2,7 @@ package POE::Component::Client::HTTP;
 # vim: ts=2 sw=2 expandtab
 
 use strict;
+use warnings;
 #use bytes; # for utf8 compatibility
 
 use constant DEBUG      => 0;
