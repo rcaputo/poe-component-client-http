@@ -27,7 +27,7 @@ sub client_start {
   DEBUG and warn "client starting...\n";
 
   my $secure_request = GET(
-    'https://thirdlobe.com/',
+    'https://www.google.com/',
     Connection => 'close',
   );
   $kernel->post(
